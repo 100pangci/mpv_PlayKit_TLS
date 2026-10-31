@@ -55,6 +55,13 @@ components:
         - path: LICENSE
           license: GPL-3.0-or-later
           url: 'https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/main/LICENSE'
+        # The AppImage contains an mpv build; ship mpv's own license texts too.
+        - path: LICENSE.GPL
+          license: GPL-2.0-or-later
+          url: 'https://raw.githubusercontent.com/mpv-player/mpv/{commit}/LICENSE.GPL'
+        - path: LICENSE.LGPL
+          license: LGPL-2.1-or-later
+          url: 'https://raw.githubusercontent.com/mpv-player/mpv/{commit}/LICENSE.LGPL'
     extract:
       type: appimage
       # Keep the upstream runtime compatibility hooks (CA certificates, path

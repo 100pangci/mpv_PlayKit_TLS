@@ -55,9 +55,17 @@ its build artifacts. Their functionality was reimplemented or replaced:
 | `save_global_props.lua` | Rewritten as `scripts/local/save_global_props.lua` |
 | `thumb_engine/{batch,helper,main,process,winapi}.lua` | Merged into the original `scripts/local/thumbfast.lua`; no `thumb_engine/` directory exists |
 
-uosc itself is downloaded unmodified from the upstream release at build time. The
-repository's original code is licensed under GPL-3.0-or-later; every third-party
-component remains under its own upstream license, recorded in
-`sources.lock.json`, `THIRD_PARTY.md`, and the package's `licenses/INDEX.json`.
-See `docs/lua-disposition.md` for the full mapping and `NOTICE` for the
-third-party boundary and corresponding-source information.
+The idle badge in `scripts/local/idle-brand.lua` reproduces the visual design of
+mpv's OSC idle logo. That design comes from mpv's `player/lua/osc.lua`, which is
+part of mpv (GPL-2.0-or-later / LGPL-2.1-or-later), not from the unlicensed
+baseline `Logo.lua`. The Lua drawing code is original; mpv's license texts are
+shipped in `licenses/`.
+
+uosc itself is downloaded unmodified from the upstream release at build time.
+Its bundled `lib/fzy.lua` (MIT) and the MPL-2.0 FFI snippet in `lib/utils.lua`
+keep their in-file notices, and their full license texts are added to
+`licenses/uosc/`. The repository's original code is licensed under
+GPL-3.0-or-later; every third-party component remains under its own upstream
+license, recorded in `sources.lock.json`, `THIRD_PARTY.md`, and the package's
+`licenses/INDEX.json`. See `docs/lua-disposition.md` for the full mapping and
+`NOTICE` for the third-party boundary and corresponding-source information.

@@ -41,6 +41,16 @@
             "license": "GPL-3.0-or-later",
             "path": "LICENSE",
             "url": "https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/main/LICENSE"
+          },
+          {
+            "license": "GPL-2.0-or-later",
+            "path": "LICENSE.GPL",
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/9e2ed65eb/LICENSE.GPL"
+          },
+          {
+            "license": "LGPL-2.1-or-later",
+            "path": "LICENSE.LGPL",
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/9e2ed65eb/LICENSE.LGPL"
           }
         ],
         "spdx": "GPL-3.0-or-later AND GPL-2.0-or-later"
@@ -111,9 +121,19 @@
             "license": "Apache-2.0",
             "path": "Material-Icons-Apache-2.0.txt",
             "url": "https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE"
+          },
+          {
+            "license": "MIT",
+            "path": "MIT-fzy.txt",
+            "url": "https://raw.githubusercontent.com/swarn/fzy-lua/master/LICENSE"
+          },
+          {
+            "license": "MPL-2.0",
+            "path": "MPL-2.0.txt",
+            "url": "https://raw.githubusercontent.com/po5/thumbfast/master/LICENSE"
           }
         ],
-        "spdx": "LGPL-2.1-or-later AND Apache-2.0"
+        "spdx": "LGPL-2.1-or-later AND Apache-2.0 AND MIT AND MPL-2.0"
       },
       "platforms": "all",
       "published_at": "2026-08-03T15:50:33Z",
@@ -197,8 +217,8 @@
       "version": "2026.10.26"
     }
   },
-  "generated_at": "2026-10-31T11:33:32Z",
-  "inputs_hash": "3c77618ab222181c8d11530a500da6fbf03f3a771be5812496077dee14b7e52a",
+  "generated_at": "2026-10-31T13:02:10Z",
+  "inputs_hash": "1566c361a8f809a06447a0708710d669e4232f85ec9dddf7a7ea321a0d06b901",
   "repository": "100pangci/mpv_PlayKit_TLS",
   "schema": 1
 }

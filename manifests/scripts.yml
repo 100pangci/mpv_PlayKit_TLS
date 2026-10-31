@@ -12,7 +12,10 @@ components:
       pattern: '^uosc\.zip$'
       version: '{release_tag}'
     license:
-      spdx: LGPL-2.1-or-later AND Apache-2.0
+      # uosc itself is LGPL-2.1-or-later.  Its bundled lib/fzy.lua is MIT and
+      # lib/utils.lua contains an MPL-2.0 FFI snippet from po5/thumbfast; the
+      # notices stay in those files, and the full texts are shipped too.
+      spdx: LGPL-2.1-or-later AND Apache-2.0 AND MIT AND MPL-2.0
       files:
         - path: LICENSE.LGPL
           license: LGPL-2.1-or-later
@@ -21,6 +24,14 @@ components:
         - path: Material-Icons-Apache-2.0.txt
           license: Apache-2.0
           url: 'https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE'
+        # lib/fzy.lua is the MIT-licensed Lua fzy implementation by Seth Warn.
+        - path: MIT-fzy.txt
+          license: MIT
+          url: 'https://raw.githubusercontent.com/swarn/fzy-lua/master/LICENSE'
+        # lib/utils.lua includes an MPL-2.0 snippet from po5/thumbfast.
+        - path: MPL-2.0.txt
+          license: MPL-2.0
+          url: 'https://raw.githubusercontent.com/po5/thumbfast/master/LICENSE'
     extract:
       type: zip
     install:

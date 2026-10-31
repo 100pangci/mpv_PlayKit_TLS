@@ -37,7 +37,27 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(labels[("mpv-windows", "LICENSE.LGPL")], "LGPL-2.1-or-later")
         self.assertEqual(labels[("uosc", "LICENSE.LGPL")], "LGPL-2.1-or-later")
         self.assertEqual(labels[("uosc", "Material-Icons-Apache-2.0.txt")], "Apache-2.0")
+        self.assertEqual(labels[("uosc", "MIT-fzy.txt")], "MIT")
+        self.assertEqual(labels[("uosc", "MPL-2.0.txt")], "MPL-2.0")
+        self.assertEqual(labels[("mpv-linux", "LICENSE.GPL")], "GPL-2.0-or-later")
+        self.assertEqual(labels[("mpv-linux", "LICENSE.LGPL")], "LGPL-2.1-or-later")
         self.assertEqual(labels[("yt-dlp-windows", "THIRD_PARTY_LICENSES.txt")], "NOASSERTION")
+
+    def test_verify_license_coverage(self) -> None:
+        from build.verify import REQUIRED_LICENSES
+
+        _, components = load_manifests()
+        for platform, paths in REQUIRED_LICENSES.items():
+            for path in paths:
+                parts = Path(path).parts
+                self.assertEqual(parts[0], "licenses", platform)
+                identifier = parts[1]
+                relative = "/".join(parts[2:])
+                self.assertIn(identifier, components, f"{platform}: {path}")
+                declared = {
+                    item["path"] for item in components[identifier]["license"]["files"]
+                }
+                self.assertIn(relative, declared, f"{platform}: {path}")
 
     def test_asset_patterns(self) -> None:
         _, components = load_manifests()

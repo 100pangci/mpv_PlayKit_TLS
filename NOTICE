@@ -10,11 +10,18 @@ Third-party components are not covered by the project's GPL license.  They are
 fetched at build time and remain under their own upstream licenses:
 
   uosc                         LGPL-2.1-or-later
+                               (includes MIT lib/fzy.lua and an MPL-2.0
+                               thumbfast FFI snippet; notices kept in-file)
   mpv (Windows build)          GPL-2.0-or-later / LGPL-2.1-or-later
   mpv (Linux AppImage)         GPL-3.0-or-later / GPL-2.0-or-later
   LXGW WenKai Mono Lite        OFL-1.1
   Material Icons               Apache-2.0
   yt-dlp                       Unlicense
+  d3dcompiler_43.dll           Microsoft DirectX redistributable
+
+The idle badge design in scripts/local/idle-brand.lua follows the mpv OSC idle
+logo from mpv's player/lua/osc.lua (mpv is GPL-2.0-or-later / LGPL-2.1-or-later).
+The drawing code is original; mpv's license texts are included in licenses/.
 
 Exact files, source URLs and SHA-256 hashes are recorded in THIRD_PARTY.md,
 sources.lock.json, manifest.json and the package's licenses/INDEX.json.

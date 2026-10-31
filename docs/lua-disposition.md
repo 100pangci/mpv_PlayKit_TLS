@@ -12,7 +12,7 @@
 
 | 基线文件 | 处置 | 当前实现 |
 | --- | --- | --- |
-| `uosc/elements/Logo.lua` | 重写 | `scripts/local/idle-brand.lua`：原创空闲画面文字标签，不使用基线的矢量 Logo 代码 |
+| `uosc/elements/Logo.lua` | 重写 | `scripts/local/idle-brand.lua`：原创绘图代码，复现 mpv OSC 空闲徽标造型（设计来自 mpv 的 `player/lua/osc.lua`，GPL-2.0-or-later / LGPL-2.1-or-later）；不使用基线的 `Logo.lua` 代码 |
 | `uosc/lib/lang.lua` | 由上游替代 | 使用 uosc 5.13.0 官方 `lib/intl.lua`（LGPL-2.1），不复制基线的部分副本；`uosc.conf` 设置 `languages=slang,zh-hans,zh,en` |
 | `input_plus.lua` | 重写 | `scripts/local/input_plus.lua`：原创按键名检测和文档链接；不包含基线代码 |
 | `save_global_props.lua` | 重写 | `scripts/local/save_global_props.lua`：原创属性保存/恢复，默认 `volume,mute` |
@@ -46,7 +46,8 @@
 - 基线包含 25 个 uosc Lua 文件，其中 16 个与上游逐字节一致，9 个被修改；这 9 个
   修改版的许可证状态无法逐文件确认。
 - 本仓库不导入这些修改版，而是从 `tomasklaen/uosc` 的当前 Release 下载
-  `uosc.zip`，保持 LGPL-2.1 原样。
+  `uosc.zip`，保持 LGPL-2.1 原样。uosc 自带的 `lib/fzy.lua`（MIT）和
+  `lib/utils.lua` 中的 MPL-2.0 片段保留原文件头，完整许可证文本随包提供。
 - 本项目只通过 `input.conf` 的 `#!` 菜单注释、`script-opts/uosc.conf` 和
   `thumbfast.lua` 做配置层/协议层定制，不修改 uosc 源码。
 

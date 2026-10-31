@@ -28,9 +28,38 @@ REQUIRED = [
     "README.txt",
     "LICENSE",
     "NOTICE",
+    "THIRD_PARTY.md",
 ]
 WINDOWS_REQUIRED = ["mpv.exe", "yt-dlp.exe"]
 LINUX_REQUIRED = ["mpv/AppRun", "mpv-playkit", "yt-dlp"]
+
+# Every license text promised by THIRD_PARTY.md must be present, and
+# licenses/INDEX.json must carry a per-file SPDX label and source URL for it.
+REQUIRED_LICENSES = {
+    "windows-x64": [
+        "licenses/lxgw-wenkai-mono-lite/OFL.txt",
+        "licenses/mpv-windows/LICENSE.GPL",
+        "licenses/mpv-windows/LICENSE.LGPL",
+        "licenses/uosc/LICENSE.LGPL",
+        "licenses/uosc/Material-Icons-Apache-2.0.txt",
+        "licenses/uosc/MIT-fzy.txt",
+        "licenses/uosc/MPL-2.0.txt",
+        "licenses/yt-dlp-windows/LICENSE",
+        "licenses/yt-dlp-windows/THIRD_PARTY_LICENSES.txt",
+    ],
+    "linux-x64": [
+        "licenses/lxgw-wenkai-mono-lite/OFL.txt",
+        "licenses/mpv-linux/LICENSE",
+        "licenses/mpv-linux/LICENSE.GPL",
+        "licenses/mpv-linux/LICENSE.LGPL",
+        "licenses/uosc/LICENSE.LGPL",
+        "licenses/uosc/Material-Icons-Apache-2.0.txt",
+        "licenses/uosc/MIT-fzy.txt",
+        "licenses/uosc/MPL-2.0.txt",
+        "licenses/yt-dlp-linux/LICENSE",
+        "licenses/yt-dlp-linux/THIRD_PARTY_LICENSES.txt",
+    ],
+}
 
 FORBIDDEN_PARTS = {
     "baseline",
@@ -55,6 +84,28 @@ def check_forbidden(path: str) -> None:
         fail(f"forbidden file type in package: {path}")
     if suffix == ".hook" and hook_is_removed(Path(path).name, DEFAULT_REMOVED_HOOKS):
         fail(f"runtime self-update/download hook in package: {path}")
+
+
+def check_licenses(stage: Path, platform: str) -> None:
+    index_path = stage / "licenses" / "INDEX.json"
+    if not index_path.is_file():
+        fail("licenses/INDEX.json missing")
+    index = read_json(index_path)
+    entries = {
+        entry.get("file"): entry
+        for entry in index.get("files", [])
+        if isinstance(entry, dict)
+    }
+    for relative in REQUIRED_LICENSES.get(platform, []):
+        if not (stage / relative).is_file():
+            fail(f"missing required license text: {relative}")
+        entry = entries.get(relative)
+        if not entry:
+            fail(f"license text not indexed in licenses/INDEX.json: {relative}")
+        if not entry.get("license"):
+            fail(f"license text has no SPDX label in licenses/INDEX.json: {relative}")
+        if not entry.get("source_url"):
+            fail(f"license text has no source URL in licenses/INDEX.json: {relative}")
 
 
 def check_stage(stage: Path, platform: str, version: str | None) -> None:
@@ -97,8 +148,7 @@ def check_stage(stage: Path, platform: str, version: str | None) -> None:
         fail(f"manifest platform mismatch: {manifest.get('platform')} != {platform}")
     if not manifest.get("components"):
         fail("manifest has no components")
-    if not (stage / "licenses" / "INDEX.json").is_file():
-        fail("licenses/INDEX.json missing")
+    check_licenses(stage, platform)
     log(f"verified stage {stage} ({platform})")
 
 

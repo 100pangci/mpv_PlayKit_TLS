@@ -11,6 +11,11 @@ INPUT_PATHS = (
     "updater",
     "manifests",
     "VERSION",
+    # These are copied into every package; changing them must trigger a build.
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY.md",
+    "LICENSE_PROVENANCE.md",
 )
 
 
