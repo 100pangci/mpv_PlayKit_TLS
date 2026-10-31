@@ -13,6 +13,17 @@ on:
         type: string
         required: false
         default: ""
+      # The candidate lock that both platform builds used.  The checked-out
+      # lock must be byte-identical to this artifact before anything is
+      # published, so the release cannot describe a different upstream set.
+      lock_artifact:
+        type: string
+        required: false
+        default: ""
+      lock_sha256:
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -38,6 +49,20 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+      - name: Download candidate lock
+        if: inputs.lock_artifact != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.lock_artifact }}
+          path: .work/candidate-lock
+      - name: Verify release lock matches the built candidate
+        if: inputs.lock_artifact != ''
+        run: |
+          set -euo pipefail
+          python -m build.lockfile \
+            --lock .work/candidate-lock/sources.lock.json \
+            --sha256 "${{ inputs.lock_sha256 }}"
+          cmp .work/candidate-lock/sources.lock.json sources.lock.json
       - name: Restore Windows package
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -50,23 +75,39 @@ jobs:
         with:
           path: dist/out
           key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-linux-x64
+          enableCrossOsArchive: true
           fail-on-cache-miss: true
       - name: Build release metadata
+        env:
+          EXPECTED_LOCK_SHA256: ${{ inputs.lock_sha256 }}
         run: |
           set -euo pipefail
-          python -m build.release \
-            --version "${{ inputs.version }}" \
-            --tag "${{ inputs.tag }}" \
-            --dist dist \
-            --lock sources.lock.json \
-            --repository "${{ github.repository }}" \
-            --out-dir dist/release \
-            --source-sha "${{ inputs.source_sha || github.sha }}"
+          if [ -n "${EXPECTED_LOCK_SHA256}" ]; then
+            python -m build.release \
+              --version "${{ inputs.version }}" \
+              --tag "${{ inputs.tag }}" \
+              --dist dist \
+              --lock sources.lock.json \
+              --repository "${{ github.repository }}" \
+              --out-dir dist/release \
+              --source-sha "${{ inputs.source_sha || github.sha }}" \
+              --expected-lock-sha256 "${EXPECTED_LOCK_SHA256}"
+          else
+            python -m build.release \
+              --version "${{ inputs.version }}" \
+              --tag "${{ inputs.tag }}" \
+              --dist dist \
+              --lock sources.lock.json \
+              --repository "${{ github.repository }}" \
+              --out-dir dist/release \
+              --source-sha "${{ inputs.source_sha || github.sha }}"
+          fi
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
           TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -86,5 +127,5 @@ jobs:
             "dist/release/SHA256SUMS" \
             --title "mpv PlayKit ${VERSION}" \
             --notes-file dist/release/release-notes.md \
-            --target "$(git rev-parse HEAD)" \
+            --target "$SOURCE_SHA" \
             --latest

@@ -19,6 +19,17 @@ on:
         type: string
         required: false
         default: ""
+      # Monthly update passes the exact candidate lock as a workflow artifact.
+      # Both platforms verify its sha256 and install it before fetching, so the
+      # resolver, both builds and the release all use identical lock bytes.
+      lock_artifact:
+        type: string
+        required: false
+        default: ""
+      lock_sha256:
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -69,11 +80,26 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+      - name: Download candidate lock
+        if: inputs.lock_artifact != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.lock_artifact }}
+          path: .work/candidate-lock
+      - name: Install verified candidate lock
+        if: inputs.lock_artifact != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m build.lockfile \
+            --lock .work/candidate-lock/sources.lock.json \
+            --sha256 "${{ inputs.lock_sha256 }}"
+          cp .work/candidate-lock/sources.lock.json sources.lock.json
       - name: Restore download cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .work/downloads
-          key: downloads-windows-${{ hashFiles('sources.lock.json') }}
+          key: downloads-windows-${{ inputs.lock_sha256 || hashFiles('sources.lock.json') }}
       - name: Fetch upstream assets
         run: python -m build.fetch --lock sources.lock.json --work .work --platform windows-x64
       - name: Assemble
@@ -128,11 +154,25 @@ jobs:
           python -m pip install -r requirements.txt
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends p7zip-full squashfs-tools
+      - name: Download candidate lock
+        if: inputs.lock_artifact != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.lock_artifact }}
+          path: .work/candidate-lock
+      - name: Install verified candidate lock
+        if: inputs.lock_artifact != ''
+        run: |
+          set -euo pipefail
+          python -m build.lockfile \
+            --lock .work/candidate-lock/sources.lock.json \
+            --sha256 "${{ inputs.lock_sha256 }}"
+          cp .work/candidate-lock/sources.lock.json sources.lock.json
       - name: Restore download cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .work/downloads
-          key: downloads-linux-${{ hashFiles('sources.lock.json') }}
+          key: downloads-linux-${{ inputs.lock_sha256 || hashFiles('sources.lock.json') }}
       - name: Fetch upstream assets
         run: python -m build.fetch --lock sources.lock.json --work .work --platform linux-x64
       - name: Assemble
@@ -164,3 +204,4 @@ jobs:
         with:
           path: dist/out
           key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-linux-x64
+          enableCrossOsArchive: true

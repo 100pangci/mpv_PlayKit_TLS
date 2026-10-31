@@ -23,7 +23,7 @@
 
 ## 哈希与 lock
 
-`build.resolve` 解析所有组件并写入 `sources.lock.json`：
+`build.resolve` 解析所有组件并写入候选 `sources.lock.json`：
 
 ```json
 {
@@ -32,23 +32,67 @@
   "repository": "100pangci/mpv_PlayKit_TLS",
   "components": {
     "mpv-windows": {
-      "release_tag": "...",
+      "release_tag": "20261021",
       "version": "20261021-git-e471496c56",
+      "commit": "e471496c56f0f49c133bd88b50aed62b845f1909",
+      "provides": "mpv",
       "asset_name": "mpv-x86_64-20261021-git-e471496c56.7z",
       "url": "https://github.com/...",
       "sha256": "...",
-      "license": { "spdx": "GPL-2.0-or-later", "files": [...] }
+      "license": {
+        "spdx": "GPL-2.0-or-later",
+        "files": [
+          {
+            "path": "LICENSE.GPL",
+            "license": "GPL-2.0-or-later",
+            "repository": "mpv-player/mpv",
+            "commit": "e471496c56f0f49c133bd88b50aed62b845f1909",
+            "source_path": "LICENSE.GPL",
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/e471496c56f0f49c133bd88b50aed62b845f1909/LICENSE.GPL",
+            "sha256": "...",
+            "size": 18092,
+            "scope": "mpv Windows build as a whole"
+          }
+        ]
+      }
     }
   }
 }
 ```
 
 - GitHub Release API 提供 `digest` 时直接使用；缺失时下载资产计算 SHA-256。
-- `build.fetch` 再校验一次；不匹配立即失败并删除临时文件。
+- 资产名只带 mpv 短 commit 时，`asset.commit_repository` 指定的仓库会把短哈希解析
+  成完整 commit；`commit` 字段始终记录完整 40 位 SHA。
+- `provides: mpv` 标记该平台的播放器组件；发布 manifest 据此写入每个平台各自的
+  `mpv_version` / `mpv_commit`，不会把 Windows 与 Linux 的 mpv 混为一个版本。
+- `build.fetch` 再校验一次资产与许可证的 SHA-256；不匹配立即失败并删除临时文件。
 - `lock_hash` 只哈希 `components`，忽略 `generated_at`，因此“仅时间变化”不会
   触发发布或提交。
-- 发布工作流只在 `lock_changed=true` 时把新 lock 提交回仓库；这个判断同样基于
-  忽略 `generated_at` 的内容哈希。
+- 月度工作流只在完整双平台构建成功后把新 lock 提交到 main；判断同样基于忽略
+  `generated_at` 的内容哈希。
+
+## 许可证固定
+
+`manifests/*.yml` 中的许可证文件不再写死 URL，而是声明：
+
+```yaml
+- path: MIT-fzy.txt              # 包内 licenses/<component>/ 下的文件名
+  license: MIT
+  repository: swarn/fzy-lua
+  ref: main                      # 解析输入：可以是 tag、分支或短 commit
+  source_path: LICENSE           # 仓库内的真实路径，默认等于 path
+```
+
+`build.resolve` 会：
+
+1. 用 GitHub Commits API 把 `ref` 解析成完整 commit；
+2. 生成 `https://raw.githubusercontent.com/<repository>/<commit>/<source_path>`；
+3. 下载许可证文本并记录 `sha256`、`size` 和对应 `scope`。
+
+lock 与包内 `licenses/INDEX.json` 因此只包含完整 commit 和固定 URL，不会出现
+`main`、`master` 或 `latest`。`build.fetch` 会校验许可证 SHA-256；
+`build.verify` 会拒绝缺少完整 commit、SHA-256 或 URL 中不含该 commit 的许可证
+条目。上游许可证无法下载或哈希不符时，构建失败而不是继续发布。
 
 ## API 认证与访问
 

@@ -6,6 +6,7 @@ components:
   - id: mpv-windows
     kind: binary
     platforms: [windows-x64]
+    provides: mpv
     upstream: shinchiro/mpv-winbuild-cmake
     release:
       mode: latest
@@ -13,6 +14,9 @@ components:
       pattern: '^mpv-x86_64-(?P<date>\d{8})-git-(?P<commit>[0-9a-f]+)\.7z$'
       version: '{date}-git-{commit}'
       commit: '{commit}'
+      # The asset name only carries mpv's short commit.  Resolve it to the
+      # full commit so the lock, manifest and license URLs are unambiguous.
+      commit_repository: mpv-player/mpv
     license:
       # The Windows build as a whole is GPL-2.0-or-later; LGPL-covered parts
       # keep their own terms.  Record both scopes instead of implying the
@@ -25,12 +29,16 @@ components:
         - license: LGPL-2.1-or-later
           scope: 'LGPL-covered parts of mpv'
       files:
+        # `ref` is resolved to a full commit at resolve time; the lock and the
+        # shipped URL only ever contain that commit, never a branch or tag.
         - path: LICENSE.GPL
           license: GPL-2.0-or-later
-          url: 'https://raw.githubusercontent.com/mpv-player/mpv/{commit}/LICENSE.GPL'
+          repository: mpv-player/mpv
+          ref: '{commit}'
         - path: LICENSE.LGPL
           license: LGPL-2.1-or-later
-          url: 'https://raw.githubusercontent.com/mpv-player/mpv/{commit}/LICENSE.LGPL'
+          repository: mpv-player/mpv
+          ref: '{commit}'
     extract:
       type: 7z
       members:
@@ -48,6 +56,7 @@ components:
   - id: mpv-linux
     kind: binary
     platforms: [linux-x64]
+    provides: mpv
     upstream: pkgforge-dev/mpv-AppImage
     release:
       mode: tag
@@ -58,6 +67,7 @@ components:
       pattern: '^mpv-(?P<version>v[0-9][^-]*(?:-\d+-g(?P<commit>[0-9a-f]+))?)-anylinux-x86_64\.AppImage$'
       version: '{version}'
       commit: '{commit}'
+      commit_repository: mpv-player/mpv
     license:
       # The AppImage packaging/runtime and the bundled mpv build carry
       # different licenses; this is not a joint license on a single work.
@@ -71,16 +81,21 @@ components:
         - license: LGPL-2.1-or-later
           scope: 'LGPL-covered parts of mpv'
       files:
+        # Pin the packaging repository to the commit the nightly tag points at
+        # instead of the moving `main` branch.
         - path: LICENSE
           license: GPL-3.0-or-later
-          url: 'https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/main/LICENSE'
+          repository: pkgforge-dev/mpv-AppImage
+          ref: '{release_tag}'
         # The AppImage contains an mpv build; ship mpv's own license texts too.
         - path: LICENSE.GPL
           license: GPL-2.0-or-later
-          url: 'https://raw.githubusercontent.com/mpv-player/mpv/{commit}/LICENSE.GPL'
+          repository: mpv-player/mpv
+          ref: '{commit}'
         - path: LICENSE.LGPL
           license: LGPL-2.1-or-later
-          url: 'https://raw.githubusercontent.com/mpv-player/mpv/{commit}/LICENSE.LGPL'
+          repository: mpv-player/mpv
+          ref: '{commit}'
     extract:
       type: appimage
       # Keep the upstream runtime compatibility hooks (CA certificates, path
@@ -108,10 +123,12 @@ components:
       files:
         - path: LICENSE
           license: Unlicense
-          url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/LICENSE'
+          repository: yt-dlp/yt-dlp
+          ref: '{release_tag}'
         - path: THIRD_PARTY_LICENSES.txt
           license: NOASSERTION
-          url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/THIRD_PARTY_LICENSES.txt'
+          repository: yt-dlp/yt-dlp
+          ref: '{release_tag}'
     install:
       - source: yt-dlp.exe
         target: yt-dlp.exe
@@ -130,10 +147,12 @@ components:
       files:
         - path: LICENSE
           license: Unlicense
-          url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/LICENSE'
+          repository: yt-dlp/yt-dlp
+          ref: '{release_tag}'
         - path: THIRD_PARTY_LICENSES.txt
           license: NOASSERTION
-          url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/THIRD_PARTY_LICENSES.txt'
+          repository: yt-dlp/yt-dlp
+          ref: '{release_tag}'
     install:
       - source: yt-dlp_linux
         target: yt-dlp

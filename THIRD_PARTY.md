@@ -53,12 +53,20 @@ licenses/
 具体文件名以 `licenses/INDEX.json` 为准。`INDEX.json` 的 `license` 字段是**逐文件
 SPDX**（例如 `LICENSE.LGPL` 标为 `LGPL-2.1-or-later`，`LICENSE.GPL` 标为
 `GPL-2.0-or-later`）；当组件声明了按对象区分的范围时，对应条目还会带有
-`scope`，说明该许可证文本覆盖的文件或片段。`manifest.json` 中的 `components.*.license` 是组件级聚合：
+`scope`，说明该许可证文本覆盖的文件或片段。每个条目还记录 `repository`、
+完整 `commit`、仓库内 `source_path`、`source_url` 与 `sha256`；`source_url`
+固定为 `raw.githubusercontent.com/<repository>/<commit>/<source_path>`，不会使用
+`main`、`master` 或 `latest`。`sources.lock.json` 保存同一组固定信息，构建时
+逐一下载并校验哈希。
+
+`manifest.json` 中的 `components.*.license` 是组件级聚合：
 当同一组件内的不同文件/资源分别适用不同许可证时，该字段为 `NOASSERTION`，并用
 `license_scope: component-aggregate` 与 `license_parts` 按对象列出各自适用的
-许可证和作用域；这样不会把多个许可证误读为对同一作品共同生效。`SHA256SUMS`
-覆盖发布资产，`manifest.json` 同时记录上游资产哈希和 `sources.lock.json`
-的内容哈希。
+许可证和作用域；这样不会把多个许可证误读为对同一作品共同生效。
+`components.*.license_files` 记录每个随包许可证文本的 SHA-256；
+`platforms.<platform>.mpv_version` / `mpv_commit` 记录该平台实际使用的 mpv
+构建（Windows 与 Linux 可以不同）。`SHA256SUMS` 覆盖发布资产，`manifest.json`
+同时记录上游资产哈希和 `sources.lock.json` 的内容哈希。
 
 ## 分发注意
 

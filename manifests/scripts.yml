@@ -32,21 +32,31 @@ components:
         - license: MPL-2.0
           scope: 'MPL-2.0 snippet inside portable_config/scripts/uosc/lib/utils.lua'
       files:
+        # `ref` may be a tag, branch or short commit, but it is resolved to a
+        # full commit at resolve time.  The lock, INDEX.json and download URL
+        # only ever contain that commit; floating branches never reach a build.
         - path: LICENSE.LGPL
           license: LGPL-2.1-or-later
-          url: 'https://raw.githubusercontent.com/tomasklaen/uosc/{release_tag}/LICENSE.LGPL'
+          repository: tomasklaen/uosc
+          ref: '{release_tag}'
         # uosc_icons.otf is Material Icons Round (Copyright Google LLC).
         - path: Material-Icons-Apache-2.0.txt
           license: Apache-2.0
-          url: 'https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE'
+          repository: google/material-design-icons
+          ref: master
+          source_path: LICENSE
         # lib/fzy.lua is the MIT-licensed Lua fzy implementation by Seth Warn.
         - path: MIT-fzy.txt
           license: MIT
-          url: 'https://raw.githubusercontent.com/swarn/fzy-lua/master/LICENSE'
+          repository: swarn/fzy-lua
+          ref: main
+          source_path: LICENSE
         # lib/utils.lua includes an MPL-2.0 snippet from po5/thumbfast.
         - path: MPL-2.0.txt
           license: MPL-2.0
-          url: 'https://raw.githubusercontent.com/po5/thumbfast/master/LICENSE'
+          repository: po5/thumbfast
+          ref: master
+          source_path: LICENSE
     extract:
       type: zip
     install:

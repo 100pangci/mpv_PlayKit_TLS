@@ -15,7 +15,8 @@ components:
       files:
         - path: OFL.txt
           license: OFL-1.1
-          url: 'https://raw.githubusercontent.com/lxgw/LxgwWenKai-Lite/{release_tag}/OFL.txt'
+          repository: lxgw/LxgwWenKai-Lite
+          ref: '{release_tag}'
     install:
       - source: LXGWWenKaiMonoLite-Regular.ttf
         target: portable_config/fonts/LXGWWenKaiMonoLite-Regular.ttf

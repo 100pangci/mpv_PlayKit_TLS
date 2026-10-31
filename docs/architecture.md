@@ -27,14 +27,18 @@
 manifests/*.yml
       │
       ▼
-build.resolve ── GitHub Releases API ──► sources.lock.json
-      │                                   (版本、URL、sha256、许可证 URL)
+build.resolve ── GitHub Releases API ──► 候选 sources.lock.json
+      │                                   (版本、URL、sha256、许可证 commit/sha256)
       ▼
 build.decide ── 比较最新 Release 的 manifest.json
       │          + 当前 lock + inputs_hash
-      ├── 无变化 ──► 结束，不创建 Release
+      ├── 无变化 ──► 结束：不上传、不构建、不提交、不发布
       ▼ 有变化
-build.fetch ── 下载资产与许可证，校验 SHA-256
+候选 lock 上传为 workflow artifact（resolve 记录文件 SHA-256）
+候选提交（base + 候选 lock）推送到临时分支 playkit/candidate-<run>-<attempt>
+      │
+      ▼
+build.fetch ── 两个平台分别下载资产与许可证，校验 lock 中的 SHA-256
       │
       ▼
 build.assemble ── 按平台解包、安装、生成 playkit-version.json / manifest.json
@@ -46,22 +50,48 @@ build.smoke ── mpv --version + 配置加载播放 + yt-dlp --version
 build.package ── 确定性 zip / tar.gz + .sha256
       │
       ▼
-build.verify ── 结构、禁用路径、引用、门禁顺序、压缩包校验
+build.verify ── 结构、禁用路径、引用、门禁顺序、许可证固定、压缩包校验
       │
       ▼
-build.release ── 汇总两个平台的 manifest 与哈希，生成发布 manifest/SHA256SUMS
+commit-lock ── 校验 artifact 与候选提交中的 lock 字节一致
+      │         fast-forward 到 main，删除临时分支
+      ▼
+build.release ── 校验包内 source_commit、mpv 信息、lock 与产物一致
       │
       ▼
-gh release create ── 仅在此前全部成功时执行
+gh release create --target <final_sha> ── 仅在此前全部成功时执行
 ```
+
+## 事务式月度更新
+
+月度工作流的核心约束是：**main 中的 `sources.lock.json` 只能代表已经通过完整
+双平台构建验证的上游组合**。
+
+- `resolve` 只把候选 lock 写成文件并上传 artifact，不修改 main。
+- 候选提交（仓库源码 + 候选 lock）先推送到临时分支。构建作业 checkout 的正是
+  这个提交，因此包内 `playkit-version.json` / `manifest.json` 的 `source_commit`
+  就是最终提交。
+- Windows 与 Linux 都从同一个 artifact 安装候选 lock，并在安装前校验
+  `lock_sha256`；两个平台不会各自重新解析上游。
+- `commit-lock` 再次校验 artifact 与候选提交中的 lock 完全一致，然后用普通
+  （非 force）push 把候选提交 fast-forward 到 main。main 在此期间被别人推进时
+  push 会失败，流程停止。
+- `release.yml` 只接受这个最终提交：它再次比较 artifact 与 checkout 的 lock，
+  `build.release` 校验两个包内的 `source_commit` 等于 `--source-sha`，并把
+  Release 的 `--target` 设为同一个提交。
+
+因此不存在“检查时是 A、构建时是 B、Release 记录成 C”的 TOCTOU 窗口：解析结果
+只解析一次，构建和发布都使用同一份 lock 与同一个提交。
 
 ## 确定性
 
-- 资产由 `sources.lock.json` 固定版本与哈希；下载后再次校验。
+- 资产由 `sources.lock.json` 固定版本与哈希；下载后再次校验。许可证文本同样固定
+  到完整 commit 与 SHA-256，下载后校验。
 - 压缩包内时间戳、属主、权限被归一化；tar.gz 的 gzip 头 `mtime=0`。
-- `manifest.json` 记录每个组件的上游版本、资产名和 SHA-256，以及配置、脚本、
-  构建代码、安装器和随包许可证文档的 `inputs_hash` 与 `sources.lock.json`
-  的内容哈希。
+- `manifest.json` 记录每个组件的上游版本、完整 commit（mpv 必有）、资产名和
+  SHA-256，以及每个许可证文本的 SHA-256；`platforms.<platform>` 另记录该平台
+  实际使用的 `mpv_version` / `mpv_commit`。还记录配置、脚本、构建代码、安装器
+  和随包许可证文档的 `inputs_hash` 与 `sources.lock.json` 的内容哈希。
 - 压缩包内时间戳、属主、权限被归一化，因此归档条目本身不随构建时间变化。
 - `playkit-version.json` / `manifest.json` 中的 `built_at` 默认取当前 UTC 时间，
   会随每次构建变化；需要可复现的字节级产物时，设置 `SOURCE_DATE_EPOCH` 或向
@@ -160,18 +190,24 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 
 | 工作流 | 触发 | 行为 |
 | --- | --- | --- |
-| `monthly-update.yml` | 每月 1 日 05:17 UTC；手动 | resolve → decide → 有变化才调用 build → release |
-| `build.yml` | push、PR、手动、被调用 | 单元测试 + Windows/Linux 构建、冒烟、打包、校验 |
-| `release.yml` | 被 `monthly-update.yml` 调用 | 从 Actions 缓存取回两个平台产物，生成发布元数据并创建 Release |
+| `monthly-update.yml` | 每月 1 日 05:17 UTC；手动 | resolve → 候选 artifact → build → commit-lock → release |
+| `build.yml` | push、PR、手动、被调用 | 单元测试 + Windows/Linux 构建、冒烟、打包、校验；被调用时先安装并校验候选 lock |
+| `release.yml` | 被 `monthly-update.yml` 调用 | 校验候选 lock 字节，从 Actions 缓存取回两个平台产物，生成发布元数据并在最终提交上创建 Release |
 
-两个平台的构建产物通过 Actions 缓存（不是 artifact 存储）传递给 release 作业，
-避免 artifact 存储配额限制。缓存键包含 `run_id` 与 `run_attempt`。
+候选 lock 通过 workflow artifact 在 resolve、两个平台构建、commit-lock 与
+release 之间传递；每个消费者都校验 resolve 记录的 `lock_sha256`。两个平台的
+构建产物通过 Actions 缓存（不是 artifact 存储）传递给 release 作业，避免 artifact
+存储配额限制。缓存键包含 `run_id`、`run_attempt` 与候选 lock 的 SHA-256。
 
 `build.yml` 中两个平台作业并行；`release.yml` 只在两者都成功后运行。
 
 ## 失败语义
 
-- 解析失败、资产缺失、哈希不符、解包失败、冒烟失败、结构校验失败、发布资产不完整：
-  工作流失败，不创建 Release。
-- 已存在同名 tag：`release.yml` 明确拒绝覆盖。
+- 解析失败、许可证无法取得、资产缺失、哈希不符、解包失败、uosc 补丁锚点失效、
+  冒烟失败、结构校验失败、发布资产不完整：工作流失败，不创建 Release。
+- 任一平台构建或校验失败：`commit-lock` 不运行，main 中的 `sources.lock.json`
+  保持上一次已验证的版本；候选提交只留在临时分支，不影响发布。
+- 已存在同名 tag 或 Release：`release.yml` 明确拒绝覆盖。
 - 无可发布变化：不创建空 Release，也不提交新 lock（仅 `generated_at` 变化不算变化）。
+- 仅有 lock 变化、而上游组件与最新 Release 完全一致时（例如修复过期 lock），
+  只把 lock 提交到 main，不制造空 Release；该组合此前已经通过发布验证。

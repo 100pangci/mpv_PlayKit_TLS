@@ -43,12 +43,29 @@ uosc 界面与菜单、完整快捷键、时间轴缩略图、属性保存、统
 
 ## 更新策略
 
-- GitHub Actions 每月 1 日 05:17 UTC 检查上游。
-- 上游和仓库输入都没有变化时不创建空 Release。
-- 有变化时才构建两个平台，生成 `manifest.json` 与 `SHA256SUMS`，然后发布。
-- 任一组件下载、哈希校验、解包、冒烟测试或结构校验失败，整个发布流程停止。
+GitHub Actions 每月 1 日 05:17 UTC 检查上游，采用事务式流程：
+
+1. **Resolve**：解析上游，生成候选 `sources.lock.json`，并上传为本次运行的
+   workflow artifact。
+2. **Build candidate**：Windows 与 Linux 下载同一份候选 lock，校验其 SHA-256
+   后覆盖工作区里的 `sources.lock.json`，再分别构建、冒烟测试、打包与校验。
+3. **Verify**：单元测试、两个平台的 smoke test、stage 校验与压缩包校验必须全部
+   成功。
+4. **Promote**：全部成功后才把候选 lock 提交到 main。候选提交先存在于临时分支，
+   验证通过后以 fast-forward 方式推进 main；失败时 main 完全不变。
+5. **Release**：Release 绑定到这个最终提交，tag、发布 manifest 的
+   `source_commit` 与包内 `playkit-version.json` 指向同一个提交。
+
+因此 main 中的 `sources.lock.json` 永远代表**最后一个已经通过完整双平台构建验证的
+上游组合**，而不是未经验证的自动解析结果。任一环节失败都会停止发布。
+
+- 上游和仓库输入都没有变化时不创建空 Release；`force` 手动触发仍可强制发布。
 - 版本号采用 `年.月`，同月多次发布时追加 `.1`、`.2`。
-- `sources.lock.json` 固定每个上游资产的版本、URL 与 SHA-256。
+- `sources.lock.json` 固定每个上游资产的版本、URL 与 SHA-256；许可证文本也固定到
+  上游仓库的完整 commit 与 SHA-256，下载 URL 不使用 `main`/`master`/`latest`。
+- `manifest.json` 的 `platforms.<platform>` 分别记录该平台的 `mpv_version` 与
+  `mpv_commit`。Windows（shinchiro）与 Linux（pkgforge-dev）可能使用不同的 mpv
+  提交，发布说明中按平台分列，不再只写一个模糊的 mpv 版本。
 
 播放器内的更新检测器只提示新版本，不会下载或覆盖播放器。关闭方法见
 [更新检测器文档](docs/update-checker.md)；`enabled=no` 时脚本不会发起任何网络请求。

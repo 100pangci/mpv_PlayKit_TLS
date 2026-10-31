@@ -12,6 +12,7 @@ from .common import (
     DEFAULT_LOCK,
     fail,
     human_size,
+    is_platform_selected,
     log,
     manifest_license_fields,
     now_iso,
@@ -34,6 +35,27 @@ def checksum_lines(out_dir: Path) -> list[str]:
             continue
         lines.append(f"{sha256_file(path)}  {path.name}")
     return lines
+
+
+def mpv_for_platform(lock: dict[str, Any], platform: str) -> dict[str, Any]:
+    """Return the exact mpv version/commit a platform package was built from."""
+    matches = [
+        (identifier, component)
+        for identifier, component in sorted(lock.get("components", {}).items())
+        if component.get("provides") == "mpv"
+        and is_platform_selected(component, platform)
+    ]
+    if len(matches) != 1:
+        fail(
+            f"{platform}: expected exactly one component with provides=mpv in the lock, "
+            f"found {len(matches)}"
+        )
+    identifier, component = matches[0]
+    version = component.get("version")
+    commit = component.get("commit")
+    if not version or not commit:
+        fail(f"{identifier}: mpv component has no version/commit")
+    return {"id": identifier, "version": version, "commit": commit}
 
 
 def find_assets(dist: Path, version: str) -> dict[str, Path]:
@@ -83,7 +105,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", type=Path, default=Path("dist/release"))
     parser.add_argument("--built-at", default=None)
     parser.add_argument("--source-sha", default="local")
+    parser.add_argument(
+        "--expected-lock-sha256",
+        default=None,
+        help="require the lock file bytes to match this hash (candidate lock check)",
+    )
     args = parser.parse_args(argv)
+
+    if args.expected_lock_sha256:
+        actual_lock_sha = sha256_file(args.lock)
+        if actual_lock_sha != args.expected_lock_sha256:
+            fail(
+                f"{args.lock}: sha256 {actual_lock_sha} does not match the verified "
+                f"candidate lock {args.expected_lock_sha256}"
+            )
 
     lock = read_json(args.lock)
     assets = find_assets(args.dist, args.version)
@@ -95,6 +130,21 @@ def main(argv: list[str] | None = None) -> int:
     for platform, asset in assets.items():
         manifest = embedded_manifest(asset, args.version, platform)
         embedded[platform] = manifest
+        if manifest.get("source_commit") != args.source_sha:
+            fail(
+                f"{platform}: package was built from "
+                f"{manifest.get('source_commit')}, expected {args.source_sha}"
+            )
+        locked_mpv = mpv_for_platform(lock, platform)
+        packaged_mpv = manifest.get("mpv") or {}
+        if (
+            packaged_mpv.get("version") != locked_mpv["version"]
+            or packaged_mpv.get("commit") != locked_mpv["commit"]
+        ):
+            fail(
+                f"{platform}: packaged mpv {packaged_mpv} does not match the lock "
+                f"{locked_mpv}"
+            )
         digest = sha256_file(asset)
         target = out_dir / asset.name
         shutil.copy2(asset, target)
@@ -103,8 +153,14 @@ def main(argv: list[str] | None = None) -> int:
             "format": "zip" if platform.startswith("windows") else "tar.gz",
             "sha256": digest,
             "size": asset.stat().st_size,
+            "mpv_component": locked_mpv["id"],
+            "mpv_version": locked_mpv["version"],
+            "mpv_commit": locked_mpv["commit"],
         }
-        log(f"release asset {asset.name}: {human_size(asset.stat().st_size)} sha256={digest}")
+        log(
+            f"release asset {asset.name}: {human_size(asset.stat().st_size)} "
+            f"sha256={digest} mpv={locked_mpv['version']} ({locked_mpv['commit']})"
+        )
 
     inputs_hashes = {manifest.get("inputs_hash") for manifest in embedded.values()}
     if len(inputs_hashes) != 1:
@@ -115,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
     for identifier, locked in sorted(lock.get("components", {}).items()):
         components[identifier] = {
             "version": locked.get("version"),
+            "commit": locked.get("commit"),
             "upstream": locked.get("upstream"),
             "release_tag": locked.get("release_tag"),
             "release_url": locked.get("release_url"),
@@ -126,6 +183,8 @@ def main(argv: list[str] | None = None) -> int:
             packaged = (manifest.get("components") or {}).get(identifier)
             if packaged and packaged.get("sha256") != locked.get("sha256"):
                 fail(f"{identifier}: packaged hash differs from lock on {platform}")
+            if packaged and packaged.get("commit") != locked.get("commit"):
+                fail(f"{identifier}: packaged commit differs from lock on {platform}")
 
     manifest = {
         "schema": 1,
@@ -146,11 +205,28 @@ def main(argv: list[str] | None = None) -> int:
         "",
         f"Automated build of `{args.repository}` at `{args.source_sha}`.",
         "",
-        "## Components",
+        "## Platform players",
         "",
-        "| Component | Version | Upstream |",
+        "Windows and Linux are built from their own upstream mpv builds and may",
+        "use different mpv commits.",
+        "",
+        "| Platform | mpv version | mpv commit |",
         "| --- | --- | --- |",
     ]
+    for platform in sorted(platforms):
+        entry = platforms[platform]
+        notes_lines.append(
+            f"| {platform} | `{entry['mpv_version']}` | `{entry['mpv_commit']}` |"
+        )
+    notes_lines.extend(
+        [
+            "",
+            "## Components",
+            "",
+            "| Component | Version | Upstream |",
+            "| --- | --- | --- |",
+        ]
+    )
     for identifier, component in sorted(components.items()):
         notes_lines.append(
             f"| {identifier} | {component.get('version')} | {component.get('upstream')} |"

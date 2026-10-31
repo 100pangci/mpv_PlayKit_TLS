@@ -139,6 +139,25 @@ def check_installer(stage: Path, platform: str) -> None:
                 fail(f"desktop template is missing {token}")
 
 
+def check_license_entry(relative: str, entry: dict) -> None:
+    """A shipped license text must be pinned to a full commit and a hash."""
+    if not entry.get("license"):
+        fail(f"license text has no SPDX label in licenses/INDEX.json: {relative}")
+    commit = str(entry.get("commit") or "")
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        fail(f"license text is not pinned to a full commit in licenses/INDEX.json: {relative}")
+    source_url = str(entry.get("source_url") or "")
+    if not source_url.startswith("https://raw.githubusercontent.com/"):
+        fail(f"license text has no pinned raw source URL in licenses/INDEX.json: {relative}")
+    if f"/{commit}/" not in source_url:
+        fail(
+            f"license source URL does not use the pinned commit "
+            f"in licenses/INDEX.json: {relative}"
+        )
+    if not re.fullmatch(r"[0-9a-f]{64}", str(entry.get("sha256") or "")):
+        fail(f"license text has no sha256 in licenses/INDEX.json: {relative}")
+
+
 def check_licenses(stage: Path, platform: str) -> None:
     index_path = stage / "licenses" / "INDEX.json"
     if not index_path.is_file():
@@ -155,10 +174,28 @@ def check_licenses(stage: Path, platform: str) -> None:
         entry = entries.get(relative)
         if not entry:
             fail(f"license text not indexed in licenses/INDEX.json: {relative}")
-        if not entry.get("license"):
-            fail(f"license text has no SPDX label in licenses/INDEX.json: {relative}")
-        if not entry.get("source_url"):
-            fail(f"license text has no source URL in licenses/INDEX.json: {relative}")
+        check_license_entry(relative, entry)
+
+
+def check_manifest_license_files(stage: Path, manifest: dict) -> None:
+    """Manifest license hashes must match the license texts shipped in the package."""
+    index_path = stage / "licenses" / "INDEX.json"
+    if not index_path.is_file():
+        fail("licenses/INDEX.json missing")
+    index = read_json(index_path)
+    entries = {
+        entry.get("file"): entry
+        for entry in index.get("files", [])
+        if isinstance(entry, dict)
+    }
+    for identifier, component in (manifest.get("components") or {}).items():
+        for item in component.get("license_files") or []:
+            relative = f"licenses/{identifier}/{item.get('path')}"
+            entry = entries.get(relative)
+            if not entry:
+                fail(f"manifest license file is missing from licenses/INDEX.json: {relative}")
+            if entry.get("sha256") != item.get("sha256"):
+                fail(f"manifest license hash differs from licenses/INDEX.json: {relative}")
 
 
 SUBPROCESS_CALL = re.compile(r"""name\s*=\s*["']subprocess["']""")
@@ -224,8 +261,20 @@ def check_stage(stage: Path, platform: str, version: str | None) -> None:
         fail(f"manifest platform mismatch: {manifest.get('platform')} != {platform}")
     if not manifest.get("components"):
         fail("manifest has no components")
+
+    mpv = manifest.get("mpv") or {}
+    mpv_component = (manifest.get("components") or {}).get(mpv.get("id")) or {}
+    if not mpv.get("version") or not mpv.get("commit"):
+        fail("manifest has no per-platform mpv version/commit")
+    if (
+        mpv_component.get("version") != mpv["version"]
+        or mpv_component.get("commit") != mpv["commit"]
+    ):
+        fail("manifest mpv block disagrees with its component entry")
+
     check_installer(stage, platform)
     check_licenses(stage, platform)
+    check_manifest_license_files(stage, manifest)
     log(f"verified stage {stage} ({platform})")
 
 

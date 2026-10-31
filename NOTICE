@@ -29,7 +29,11 @@ logo from mpv's player/lua/osc.lua (mpv is GPL-2.0-or-later / LGPL-2.1-or-later)
 The drawing code is original; mpv's license texts are included in licenses/.
 
 Exact files, source URLs and SHA-256 hashes are recorded in THIRD_PARTY.md,
-sources.lock.json, manifest.json and the package's licenses/INDEX.json.
+sources.lock.json, manifest.json and the package's licenses/INDEX.json.  Every
+license text is pinned to a full upstream commit.  The exact mpv version and
+full commit used by each platform are recorded separately in manifest.json
+(`platforms.<platform>.mpv_version` / `mpv_commit`); the Windows and Linux
+builds may use different mpv commits.
 
 Historical mpv_PlayKit material whose license could not be established is not
 included in this repository or its packages.  See LICENSE_PROVENANCE.md.

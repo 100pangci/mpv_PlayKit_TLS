@@ -10,9 +10,14 @@
       "license": {
         "files": [
           {
+            "commit": "b712c83d98acf977bacfb7fb010207802808bda9",
             "license": "OFL-1.1",
             "path": "OFL.txt",
-            "url": "https://raw.githubusercontent.com/lxgw/LxgwWenKai-Lite/v1.530/OFL.txt"
+            "repository": "lxgw/LxgwWenKai-Lite",
+            "sha256": "0333a85fe077b6849f8e417acc44e8bd879442ceb681e271acf93e2d57fd4e2e",
+            "size": 5176,
+            "source_path": "OFL.txt",
+            "url": "https://raw.githubusercontent.com/lxgw/LxgwWenKai-Lite/b712c83d98acf977bacfb7fb010207802808bda9/OFL.txt"
           }
         ],
         "spdx": "OFL-1.1"
@@ -32,25 +37,43 @@
       "api_url": "https://api.github.com/repos/pkgforge-dev/mpv-AppImage/releases/assets/695117485",
       "asset_id": 695117485,
       "asset_name": "mpv-v0.41.0-1373-g9e2ed65eb-anylinux-x86_64.AppImage",
-      "commit": "9e2ed65eb",
+      "commit": "9e2ed65eb0c02f99a352dfa1ad3c85ecceefe005",
       "id": "mpv-linux",
       "kind": "binary",
       "license": {
         "files": [
           {
+            "commit": "953226d87422e9ef2307afacd2e049b1ee0a7f56",
             "license": "GPL-3.0-or-later",
             "path": "LICENSE",
-            "url": "https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/main/LICENSE"
+            "repository": "pkgforge-dev/mpv-AppImage",
+            "scope": "pkgforge-dev/mpv-AppImage packaging and runtime",
+            "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+            "size": 35149,
+            "source_path": "LICENSE",
+            "url": "https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/953226d87422e9ef2307afacd2e049b1ee0a7f56/LICENSE"
           },
           {
+            "commit": "9e2ed65eb0c02f99a352dfa1ad3c85ecceefe005",
             "license": "GPL-2.0-or-later",
             "path": "LICENSE.GPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/9e2ed65eb/LICENSE.GPL"
+            "repository": "mpv-player/mpv",
+            "scope": "mpv binary and GPL-covered components",
+            "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+            "size": 17984,
+            "source_path": "LICENSE.GPL",
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/9e2ed65eb0c02f99a352dfa1ad3c85ecceefe005/LICENSE.GPL"
           },
           {
+            "commit": "9e2ed65eb0c02f99a352dfa1ad3c85ecceefe005",
             "license": "LGPL-2.1-or-later",
             "path": "LICENSE.LGPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/9e2ed65eb/LICENSE.LGPL"
+            "repository": "mpv-player/mpv",
+            "scope": "LGPL-covered parts of mpv",
+            "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
+            "size": 26410,
+            "source_path": "LICENSE.LGPL",
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/9e2ed65eb0c02f99a352dfa1ad3c85ecceefe005/LICENSE.LGPL"
           }
         ],
         "parts": [
@@ -73,6 +96,7 @@
       "platforms": [
         "linux-x64"
       ],
+      "provides": "mpv",
       "published_at": "2026-10-31T10:48:45Z",
       "release_mode": "tag",
       "release_tag": "nightly",
@@ -87,20 +111,32 @@
       "api_url": "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/assets/660943799",
       "asset_id": 660943799,
       "asset_name": "mpv-x86_64-20261021-git-e471496c56.7z",
-      "commit": "e471496c56",
+      "commit": "e471496c56f0f49c133bd88b50aed62b845f1909",
       "id": "mpv-windows",
       "kind": "binary",
       "license": {
         "files": [
           {
+            "commit": "e471496c56f0f49c133bd88b50aed62b845f1909",
             "license": "GPL-2.0-or-later",
             "path": "LICENSE.GPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/e471496c56/LICENSE.GPL"
+            "repository": "mpv-player/mpv",
+            "scope": "mpv Windows build as a whole",
+            "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+            "size": 17984,
+            "source_path": "LICENSE.GPL",
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/e471496c56f0f49c133bd88b50aed62b845f1909/LICENSE.GPL"
           },
           {
+            "commit": "e471496c56f0f49c133bd88b50aed62b845f1909",
             "license": "LGPL-2.1-or-later",
             "path": "LICENSE.LGPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/e471496c56/LICENSE.LGPL"
+            "repository": "mpv-player/mpv",
+            "scope": "LGPL-covered parts of mpv",
+            "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
+            "size": 26410,
+            "source_path": "LICENSE.LGPL",
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/e471496c56f0f49c133bd88b50aed62b845f1909/LICENSE.LGPL"
           }
         ],
         "parts": [
@@ -119,6 +155,7 @@
       "platforms": [
         "windows-x64"
       ],
+      "provides": "mpv",
       "published_at": "2026-10-21T00:54:32Z",
       "release_mode": "latest",
       "release_tag": "20261021",
@@ -139,24 +176,48 @@
       "license": {
         "files": [
           {
+            "commit": "d124c2c930d69446448022851373e00ae592390d",
             "license": "LGPL-2.1-or-later",
             "path": "LICENSE.LGPL",
-            "url": "https://raw.githubusercontent.com/tomasklaen/uosc/5.13.0/LICENSE.LGPL"
+            "repository": "tomasklaen/uosc",
+            "scope": "uosc scripts and UI, except the files and snippet listed below",
+            "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+            "size": 26530,
+            "source_path": "LICENSE.LGPL",
+            "url": "https://raw.githubusercontent.com/tomasklaen/uosc/d124c2c930d69446448022851373e00ae592390d/LICENSE.LGPL"
           },
           {
+            "commit": "10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7",
             "license": "Apache-2.0",
             "path": "Material-Icons-Apache-2.0.txt",
-            "url": "https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE"
+            "repository": "google/material-design-icons",
+            "scope": "portable_config/fonts/uosc_icons.otf (Material Icons Round)",
+            "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+            "size": 11357,
+            "source_path": "LICENSE",
+            "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/LICENSE"
           },
           {
+            "commit": "e457e9b39292f4cb052735c706673da573209a0e",
             "license": "MIT",
             "path": "MIT-fzy.txt",
-            "url": "https://raw.githubusercontent.com/swarn/fzy-lua/master/LICENSE"
+            "repository": "swarn/fzy-lua",
+            "scope": "portable_config/scripts/uosc/lib/fzy.lua",
+            "sha256": "8ab073f53c6d52e5fce8a62a75925c455b522a3e6cd15ecc58605813de1b1977",
+            "size": 1076,
+            "source_path": "LICENSE",
+            "url": "https://raw.githubusercontent.com/swarn/fzy-lua/e457e9b39292f4cb052735c706673da573209a0e/LICENSE"
           },
           {
+            "commit": "0f711de3138c9bd6718209d819ac54022c23ded2",
             "license": "MPL-2.0",
             "path": "MPL-2.0.txt",
-            "url": "https://raw.githubusercontent.com/po5/thumbfast/master/LICENSE"
+            "repository": "po5/thumbfast",
+            "scope": "MPL-2.0 snippet inside portable_config/scripts/uosc/lib/utils.lua",
+            "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+            "size": 16726,
+            "source_path": "LICENSE",
+            "url": "https://raw.githubusercontent.com/po5/thumbfast/0f711de3138c9bd6718209d819ac54022c23ded2/LICENSE"
           }
         ],
         "parts": [
@@ -201,14 +262,24 @@
       "license": {
         "files": [
           {
+            "commit": "f264a6cbd1f630894da0f368df00f8aae50140e0",
             "license": "Unlicense",
             "path": "LICENSE",
-            "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/LICENSE"
+            "repository": "yt-dlp/yt-dlp",
+            "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+            "size": 1211,
+            "source_path": "LICENSE",
+            "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/f264a6cbd1f630894da0f368df00f8aae50140e0/LICENSE"
           },
           {
+            "commit": "f264a6cbd1f630894da0f368df00f8aae50140e0",
             "license": "NOASSERTION",
             "path": "THIRD_PARTY_LICENSES.txt",
-            "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt"
+            "repository": "yt-dlp/yt-dlp",
+            "sha256": "472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7",
+            "size": 243550,
+            "source_path": "THIRD_PARTY_LICENSES.txt",
+            "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/f264a6cbd1f630894da0f368df00f8aae50140e0/THIRD_PARTY_LICENSES.txt"
           }
         ],
         "spdx": "Unlicense"
@@ -236,14 +307,24 @@
       "license": {
         "files": [
           {
+            "commit": "f264a6cbd1f630894da0f368df00f8aae50140e0",
             "license": "Unlicense",
             "path": "LICENSE",
-            "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/LICENSE"
+            "repository": "yt-dlp/yt-dlp",
+            "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+            "size": 1211,
+            "source_path": "LICENSE",
+            "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/f264a6cbd1f630894da0f368df00f8aae50140e0/LICENSE"
           },
           {
+            "commit": "f264a6cbd1f630894da0f368df00f8aae50140e0",
             "license": "NOASSERTION",
             "path": "THIRD_PARTY_LICENSES.txt",
-            "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt"
+            "repository": "yt-dlp/yt-dlp",
+            "sha256": "472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7",
+            "size": 243550,
+            "source_path": "THIRD_PARTY_LICENSES.txt",
+            "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/f264a6cbd1f630894da0f368df00f8aae50140e0/THIRD_PARTY_LICENSES.txt"
           }
         ],
         "spdx": "Unlicense"
@@ -262,8 +343,8 @@
       "version": "2026.10.26"
     }
   },
-  "generated_at": "2026-10-31T15:36:18Z",
-  "inputs_hash": "1f503a58fb8b33a575db09ef94c4b916b5e5041ac21918270462e092229f8a65",
+  "generated_at": "2026-10-31T16:48:41Z",
+  "inputs_hash": "c88583de249e574f5f331230171736d7bb165487a11cd876595aa76e0828ac18",
   "repository": "100pangci/mpv_PlayKit_TLS",
   "schema": 1
 }

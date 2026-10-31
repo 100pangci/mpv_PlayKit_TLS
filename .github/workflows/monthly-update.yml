@@ -1,5 +1,20 @@
 name: Monthly update
 
+# Transactional monthly update:
+#
+#   resolve candidate -> build both platforms -> verify -> promote lock -> release
+#
+# The resolver writes a candidate sources.lock.json and uploads it as a
+# workflow artifact.  Windows and Linux download that exact artifact, verify
+# its sha256 and build from it.  Only after tests, both platform builds, smoke
+# tests and archive verification succeed is the lock committed to main.  If any
+# step fails, main keeps the previous, already verified lock.
+#
+# The candidate commit (base source + candidate lock) lives on a temporary
+# branch while it is being built.  On success that same commit is fast-forwarded
+# to main, so the package's source_commit, the tag target and the Release target
+# are all the same verified commit.  main is never modified before verification.
+
 on:
   schedule:
     # 05:17 UTC on the first day of every month.
@@ -23,21 +38,30 @@ env:
   PYTHONUNBUFFERED: "1"
   PYTHONIOENCODING: "utf-8"
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  TARGET_BRANCH: ${{ github.event.repository.default_branch || 'main' }}
 
 jobs:
   resolve:
     runs-on: ubuntu-24.04
     outputs:
       release_needed: ${{ steps.decide.outputs.release_needed }}
+      lock_changed: ${{ steps.decide.outputs.lock_changed }}
+      upstream_changed: ${{ steps.decide.outputs.upstream_changed }}
+      inputs_changed: ${{ steps.decide.outputs.inputs_changed }}
       version: ${{ steps.decide.outputs.version }}
       tag: ${{ steps.decide.outputs.tag }}
-      lock_changed: ${{ steps.decide.outputs.lock_changed }}
       reason: ${{ steps.decide.outputs.reason }}
-      source_sha: ${{ steps.revision.outputs.source_sha }}
+      candidate_sha: ${{ steps.candidate.outputs.candidate_sha }}
+      candidate_branch: ${{ steps.candidate.outputs.candidate_branch }}
+      lock_artifact: ${{ steps.candidate.outputs.lock_artifact }}
+      lock_sha256: ${{ steps.candidate.outputs.lock_sha256 }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Always base the candidate on the default branch, even when the
+          # workflow was dispatched from another branch.
+          ref: ${{ github.event.repository.default_branch || 'main' }}
           fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -48,8 +72,11 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Resolve latest upstream releases
         run: |
-          mkdir -p .work
-          python -m build.resolve --output .work/sources.lock.json --repository "${{ github.repository }}"
+          set -euo pipefail
+          mkdir -p .work/candidate
+          python -m build.resolve \
+            --output .work/candidate/sources.lock.json \
+            --repository "${{ github.repository }}"
       - name: Decide whether a release is needed
         id: decide
         env:
@@ -59,27 +86,49 @@ jobs:
           extra=""
           if [ "${FORCE:-false}" = "true" ]; then extra="--force"; fi
           python -m build.decide \
-            --new-lock .work/sources.lock.json \
+            --new-lock .work/candidate/sources.lock.json \
             --old-lock sources.lock.json \
             --repository "${{ github.repository }}" \
             --github-output "$GITHUB_OUTPUT" \
             $extra
-      - name: Commit fresh lock
-        id: lock
-        if: steps.decide.outputs.lock_changed == 'true'
+      - name: Prepare candidate commit
+        id: candidate
+        if: steps.decide.outputs.release_needed == 'true' || steps.decide.outputs.lock_changed == 'true'
         env:
-          TARGET_BRANCH: ${{ github.ref_name }}
+          LOCK_CHANGED: ${{ steps.decide.outputs.lock_changed }}
+          CANDIDATE_ARTIFACT: playkit-candidate-lock-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
-          cp .work/sources.lock.json sources.lock.json
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sources.lock.json
-          git commit -m "chore: update upstream lock"
-          git push origin "HEAD:${TARGET_BRANCH}"
-      - name: Record build revision
-        id: revision
-        run: echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          branch=""
+          if [ "${LOCK_CHANGED}" = "true" ]; then
+            cp .work/candidate/sources.lock.json sources.lock.json
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add sources.lock.json
+            git commit -m "chore: update upstream lock"
+            branch="playkit/candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            # Temporary branch only.  main is untouched until every build and
+            # verification step below has passed.
+            git push origin "HEAD:refs/heads/${branch}"
+          else
+            # Only generated_at would differ.  Keep the exact repository bytes
+            # so the artifact, both builds and the release see one identical
+            # lock file.
+            cp sources.lock.json .work/candidate/sources.lock.json
+          fi
+          lock_sha="$(python -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' .work/candidate/sources.lock.json)"
+          echo "lock_sha256=${lock_sha}" >> "$GITHUB_OUTPUT"
+          echo "lock_artifact=${CANDIDATE_ARTIFACT}" >> "$GITHUB_OUTPUT"
+          echo "candidate_branch=${branch}" >> "$GITHUB_OUTPUT"
+          echo "candidate_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Upload candidate lock
+        if: steps.decide.outputs.release_needed == 'true' || steps.decide.outputs.lock_changed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playkit-candidate-lock-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .work/candidate/sources.lock.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Report decision
         run: |
           echo "::notice::release_needed=${{ steps.decide.outputs.release_needed }} version=${{ steps.decide.outputs.version }} reason=${{ steps.decide.outputs.reason }}"
@@ -90,13 +139,76 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
-      source_sha: ${{ needs.resolve.outputs.source_sha }}
+      source_sha: ${{ needs.resolve.outputs.candidate_sha }}
+      lock_artifact: ${{ needs.resolve.outputs.lock_artifact }}
+      lock_sha256: ${{ needs.resolve.outputs.lock_sha256 }}
+
+  commit-lock:
+    needs: [resolve, build]
+    # Runs when there is something to promote.  When a release is needed the
+    # whole reusable build workflow must have succeeded first.
+    if: |
+      always() &&
+      needs.resolve.result == 'success' &&
+      (needs.resolve.outputs.release_needed == 'true' || needs.resolve.outputs.lock_changed == 'true') &&
+      (needs.resolve.outputs.release_needed != 'true' || needs.build.result == 'success')
+    runs-on: ubuntu-24.04
+    outputs:
+      final_sha: ${{ steps.promote.outputs.final_sha }}
+    steps:
+      - name: Checkout candidate revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.candidate_sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Download candidate lock
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.resolve.outputs.lock_artifact }}
+          path: .work/candidate-lock
+      - name: Verify candidate lock
+        run: |
+          set -euo pipefail
+          python -m build.lockfile \
+            --lock .work/candidate-lock/sources.lock.json \
+            --sha256 "${{ needs.resolve.outputs.lock_sha256 }}"
+          cmp .work/candidate-lock/sources.lock.json sources.lock.json
+      - name: Promote verified lock to main
+        id: promote
+        env:
+          CANDIDATE_SHA: ${{ needs.resolve.outputs.candidate_sha }}
+          CANDIDATE_BRANCH: ${{ needs.resolve.outputs.candidate_branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin "${TARGET_BRANCH}"
+          if git merge-base --is-ancestor "${CANDIDATE_SHA}" "origin/${TARGET_BRANCH}"; then
+            echo "candidate is already contained in ${TARGET_BRANCH}"
+          else
+            # Plain (non-force) push: a fast-forward check.  If main moved while
+            # the candidate was being built, this fails and no release happens.
+            git push origin "${CANDIDATE_SHA}:refs/heads/${TARGET_BRANCH}"
+          fi
+          if [ -n "${CANDIDATE_BRANCH}" ]; then
+            git push origin --delete "${CANDIDATE_BRANCH}" || true
+          fi
+          echo "final_sha=${CANDIDATE_SHA}" >> "$GITHUB_OUTPUT"
 
   release:
-    needs: [resolve, build]
-    if: needs.resolve.outputs.release_needed == 'true'
+    needs: [resolve, build, commit-lock]
+    if: |
+      needs.resolve.outputs.release_needed == 'true' &&
+      needs.build.result == 'success' &&
+      needs.commit-lock.result == 'success'
     uses: ./.github/workflows/release.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
       tag: ${{ needs.resolve.outputs.tag }}
-      source_sha: ${{ needs.resolve.outputs.source_sha }}
+      source_sha: ${{ needs.commit-lock.outputs.final_sha }}
+      lock_artifact: ${{ needs.resolve.outputs.lock_artifact }}
+      lock_sha256: ${{ needs.resolve.outputs.lock_sha256 }}

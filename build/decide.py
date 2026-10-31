@@ -7,7 +7,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .common import DEFAULT_LOCK, MANIFEST_DIR, fail, load_manifests, log, read_json
+from .common import (
+    DEFAULT_LOCK,
+    MANIFEST_DIR,
+    fail,
+    license_files_summary,
+    load_manifests,
+    log,
+    read_json,
+)
 from .inputs import compute_inputs_hash
 from .upstream import GitHubNotFound, download_asset_bytes, github_json, list_releases, lock_hash
 from .version import next_release_version, tag_for_version
@@ -27,12 +35,17 @@ def _manifest_component_fields(component: dict[str, Any]) -> dict[str, Any]:
         license_value = license_info.get("spdx")
         license_scope = license_info.get("scope")
         license_parts = license_info.get("parts")
+        license_files = license_info.get("files")
     else:
         license_value = license_info
         license_scope = component.get("license_scope")
         license_parts = component.get("license_parts")
+        license_files = component.get("license_files")
     return {
         "version": component.get("version"),
+        # Windows and Linux mpv builds can use different commits; the commit is
+        # part of the published manifest and therefore part of this comparison.
+        "commit": component.get("commit"),
         "upstream": component.get("upstream"),
         "release_tag": component.get("release_tag"),
         "release_url": component.get("release_url"),
@@ -41,6 +54,9 @@ def _manifest_component_fields(component: dict[str, Any]) -> dict[str, Any]:
         "license": license_value,
         "license_scope": license_scope,
         "license_parts": license_parts,
+        # Content hashes only: re-pinning a license source to a newer commit
+        # with identical text must not force a new release.
+        "license_files": license_files_summary(license_files),
     }
 
 
@@ -94,6 +110,47 @@ def latest_manifest(repository: str, release: dict[str, Any] | None) -> dict[str
     return None
 
 
+def decide_release(
+    *,
+    force: bool,
+    release: dict[str, Any] | None,
+    manifest: dict[str, Any] | None,
+    old_lock: dict[str, Any],
+    new_lock: dict[str, Any],
+    local_inputs_hash: str,
+) -> dict[str, Any]:
+    """Pure decision function, kept separate so it is testable without network."""
+    lock_changed = (
+        lock_hash(old_lock) != lock_hash(new_lock)
+        or old_lock.get("inputs_hash") != new_lock.get("inputs_hash")
+    )
+    upstream_changed = manifest is None
+    if manifest is not None:
+        upstream_changed = release_components(manifest) != compact_components(new_lock)
+    inputs_changed = manifest is None or manifest.get("inputs_hash") != local_inputs_hash
+
+    release_needed = bool(force or release is None or upstream_changed or inputs_changed)
+    reasons: list[str] = []
+    if force:
+        reasons.append("forced")
+    if release is None:
+        reasons.append("no existing release")
+    if manifest is None:
+        reasons.append("no readable latest manifest")
+    elif upstream_changed:
+        reasons.append("upstream components changed")
+    if inputs_changed:
+        reasons.append("repository inputs changed")
+
+    return {
+        "release_needed": release_needed,
+        "upstream_changed": upstream_changed,
+        "inputs_changed": inputs_changed,
+        "lock_changed": lock_changed,
+        "reason": "; ".join(reasons) if reasons else "no changes",
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Decide whether this run needs a new PlayKit release")
     parser.add_argument("--manifests", type=Path, default=MANIFEST_DIR)
@@ -118,27 +175,14 @@ def main(argv: list[str] | None = None) -> int:
     release = latest_release(repository)
     manifest = latest_manifest(repository, release)
 
-    lock_changed = (
-        lock_hash(old_lock) != lock_hash(new_lock)
-        or old_lock.get("inputs_hash") != new_lock.get("inputs_hash")
+    decision = decide_release(
+        force=args.force,
+        release=release,
+        manifest=manifest,
+        old_lock=old_lock,
+        new_lock=new_lock,
+        local_inputs_hash=local_inputs_hash,
     )
-    upstream_changed = manifest is None
-    if manifest is not None:
-        upstream_changed = release_components(manifest) != compact_components(new_lock)
-    inputs_changed = manifest is None or manifest.get("inputs_hash") != local_inputs_hash
-
-    release_needed = bool(args.force or release is None or upstream_changed or inputs_changed)
-    reasons: list[str] = []
-    if args.force:
-        reasons.append("forced")
-    if release is None:
-        reasons.append("no existing release")
-    if manifest is None:
-        reasons.append("no readable latest manifest")
-    elif upstream_changed:
-        reasons.append("upstream components changed")
-    if inputs_changed:
-        reasons.append("repository inputs changed")
 
     releases = list_releases(repository)
     now = datetime.now(tz=timezone.utc)
@@ -149,13 +193,9 @@ def main(argv: list[str] | None = None) -> int:
 
     result = {
         "repository": repository,
-        "release_needed": release_needed,
-        "upstream_changed": upstream_changed,
-        "inputs_changed": inputs_changed,
-        "lock_changed": lock_changed,
+        **decision,
         "version": version,
         "tag": tag,
-        "reason": "; ".join(reasons) if reasons else "no changes",
         "latest_tag": release.get("tag_name") if release else None,
         "latest_manifest_version": (manifest or {}).get("playkit_version"),
         "lock_hash": lock_hash(new_lock),
@@ -175,8 +215,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     else:
         log(
-            f"release_needed={release_needed} version={version} tag={tag} "
-            f"reason={result['reason']}"
+            f"release_needed={decision['release_needed']} version={version} tag={tag} "
+            f"reason={decision['reason']}"
         )
     return 0
 

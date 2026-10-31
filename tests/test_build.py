@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import re
 import tarfile
@@ -343,8 +345,12 @@ class LicenseScopeTests(unittest.TestCase):
         self.assertEqual(
             fields["license_parts"], [{"license": "MIT", "scope": "lib/fzy.lua"}]
         )
-        # Components with a single aggregate license keep the existing shape.
-        self.assertEqual(manifest_license_fields({"spdx": "MIT"}), {"license": "MIT"})
+        # Components with a single aggregate license keep the existing shape;
+        # license file content hashes are always recorded.
+        self.assertEqual(
+            manifest_license_fields({"spdx": "MIT"}),
+            {"license": "MIT", "license_files": []},
+        )
 
     def test_embedded_manifest_keeps_scoped_licenses(self) -> None:
         from build.assemble import write_metadata
@@ -353,6 +359,15 @@ class LicenseScopeTests(unittest.TestCase):
             stage = Path(temporary)
             lock = {
                 "components": {
+                    "mpv-windows": {
+                        "version": "20261021-git-abc",
+                        "commit": "a" * 40,
+                        "upstream": "shinchiro/mpv-winbuild-cmake",
+                        "platforms": ["windows-x64"],
+                        "provides": "mpv",
+                        "sha256": "abc",
+                        "license": {"spdx": "GPL-2.0-or-later", "files": []},
+                    },
                     "uosc": {
                         "version": "1",
                         "upstream": "tomasklaen/uosc",
@@ -366,7 +381,7 @@ class LicenseScopeTests(unittest.TestCase):
                             "parts": [{"license": "MIT", "scope": "lib/fzy.lua"}],
                             "files": [],
                         },
-                    }
+                    },
                 }
             }
             write_metadata(
@@ -377,15 +392,28 @@ class LicenseScopeTests(unittest.TestCase):
                 built_at="2026-10-31T00:00:00Z",
                 source_sha="abc",
                 inputs_hash="def",
-                fetched={"uosc": {"sha256": "abc"}},
+                fetched={
+                    "uosc": {"sha256": "abc"},
+                    "mpv-windows": {"sha256": "abc"},
+                },
                 lock=lock,
             )
-            component = read_json(stage / "manifest.json")["components"]["uosc"]
+            manifest = read_json(stage / "manifest.json")
+            component = manifest["components"]["uosc"]
             self.assertEqual(component["license"], "NOASSERTION")
             self.assertEqual(component["license_scope"], "component-aggregate")
             self.assertEqual(
                 component["license_parts"], [{"license": "MIT", "scope": "lib/fzy.lua"}]
             )
+            self.assertEqual(
+                manifest["mpv"],
+                {
+                    "id": "mpv-windows",
+                    "version": "20261021-git-abc",
+                    "commit": "a" * 40,
+                },
+            )
+            self.assertEqual(manifest["components"]["mpv-windows"]["commit"], "a" * 40)
 
 
 class LicenseIndexTests(unittest.TestCase):
@@ -406,7 +434,13 @@ class LicenseIndexTests(unittest.TestCase):
                             "path": "MIT-fzy.txt",
                             "local_path": "licenses/uosc/MIT-fzy.txt",
                             "license": "MIT",
-                            "url": "https://example.invalid/MIT",
+                            "repository": "swarn/fzy-lua",
+                            "commit": "a" * 40,
+                            "source_path": "LICENSE",
+                            "scope": "lib/fzy.lua",
+                            "url": "https://raw.githubusercontent.com/swarn/fzy-lua/"
+                            + "a" * 40
+                            + "/LICENSE",
                             "sha256": "abc",
                         }
                     ]
@@ -430,6 +464,10 @@ class LicenseIndexTests(unittest.TestCase):
             entry = read_json(stage / "licenses" / "INDEX.json")["files"][0]
             self.assertEqual(entry["license"], "MIT")
             self.assertEqual(entry["scope"], "lib/fzy.lua")
+            self.assertEqual(entry["repository"], "swarn/fzy-lua")
+            self.assertEqual(entry["commit"], "a" * 40)
+            self.assertEqual(entry["source_path"], "LICENSE")
+            self.assertIn(f"/{'a' * 40}/", entry["source_url"])
             self.assertTrue((stage / "licenses" / "uosc" / "MIT-fzy.txt").is_file())
 
 
@@ -685,6 +723,735 @@ class UpdateCheckerTests(unittest.TestCase):
             "if not local_version or not parse_version(local_version) then return end",
             text,
         )
+
+    def test_disabled_config_returns_before_state_or_network(self) -> None:
+        text = (ROOT / "updater" / "update-check.lua").read_text(encoding="utf-8")
+        gate = text.find("truthy_disabled(opts.enabled)")
+        state_path = text.find("local state_path")
+        subprocess_call = text.find('name = "subprocess"')
+        self.assertNotEqual(gate, -1)
+        self.assertNotEqual(state_path, -1)
+        self.assertNotEqual(subprocess_call, -1)
+        self.assertLess(gate, state_path)
+        self.assertLess(state_path, subprocess_call)
+
+    def test_in_flight_disable_stops_the_next_http_client(self) -> None:
+        text = (ROOT / "updater" / "update-check.lua").read_text(encoding="utf-8")
+        marker = text.find(
+            "The user may have disabled the checker while curl/wget was in"
+        )
+        self.assertNotEqual(marker, -1)
+        self.assertLess(marker, text.find("try(index + 1)"))
+        self.assertIn(
+            "if state.disabled then\n"
+            "\t\t\t\tchecking = false\n"
+            "\t\t\t\treturn\n"
+            "\t\t\tend",
+            text,
+        )
+
+    def test_reset_clears_persistent_disable(self) -> None:
+        text = (ROOT / "updater" / "update-check.lua").read_text(encoding="utf-8")
+        reset = text.find('mp.add_key_binding(nil, "reset"')
+        self.assertNotEqual(reset, -1)
+        tail = text[reset:]
+        self.assertIn("state.disabled = false", tail)
+        self.assertIn("state.snoozed_until = 0", tail)
+        self.assertIn("run_check(true)", tail)
+        # The disable/reset bindings must exist regardless of saved state.
+        self.assertIn('mp.add_key_binding(nil, "disable"', text)
+        self.assertIn('mp.add_key_binding(nil, "check-now"', text)
+        self.assertIn('mp.add_key_binding(nil, "open-release"', text)
+        self.assertIn('mp.add_key_binding(nil, "snooze"', text)
+
+    def test_state_write_failures_warn_instead_of_aborting(self) -> None:
+        text = (ROOT / "updater" / "update-check.lua").read_text(encoding="utf-8")
+        self.assertIn("could not write state file", text)
+        self.assertIn("could not replace state file", text)
+        # Temporary file + rename keeps a half-written state from replacing a
+        # good one, and a failed write only warns.
+        self.assertIn("local temp_path = state_path .. \".tmp\"", text)
+        self.assertIn("os.remove(temp_path)", text)
+        start = text.find("local function write_state()")
+        end = text.find("local auto_check_allowed", start)
+        self.assertNotEqual(start, -1)
+        self.assertNotEqual(end, -1)
+        # Only log via mp.msg.error; a failed state write must not call Lua's
+        # error() and abort the script.
+        body = text[start:end].replace("mp.msg.error(", "")
+        self.assertNotIn("error(", body)
+
+
+class LicensePinningTests(unittest.TestCase):
+    def test_license_sources_use_repository_and_ref(self) -> None:
+        _, components = load_manifests()
+        for identifier, component in components.items():
+            for item in component["license"]["files"]:
+                self.assertNotIn("url", item, f"{identifier}/{item['path']}")
+                self.assertTrue(item.get("repository"), f"{identifier}/{item['path']}")
+                self.assertTrue(item.get("ref"), f"{identifier}/{item['path']}")
+
+    def test_raw_url_uses_the_pinned_commit(self) -> None:
+        from build.upstream import raw_url
+
+        commit = "a" * 40
+        url = raw_url("google/material-design-icons", commit, "LICENSE")
+        self.assertEqual(
+            url,
+            f"https://raw.githubusercontent.com/google/material-design-icons/{commit}/LICENSE",
+        )
+        self.assertNotIn("/main/", url)
+        self.assertNotIn("/master/", url)
+
+    def test_committed_lock_licenses_are_pinned(self) -> None:
+        lock = read_json(ROOT / "sources.lock.json")
+        for identifier, component in lock["components"].items():
+            for item in component["license"]["files"]:
+                self.assertRegex(item["commit"], r"^[0-9a-f]{40}$", identifier)
+                self.assertRegex(item["sha256"], r"^[0-9a-f]{64}$", identifier)
+                self.assertIn(f"/{item['commit']}/", item["url"], identifier)
+                self.assertNotRegex(item["url"], r"/(main|master|latest)/", identifier)
+                self.assertTrue(item.get("repository"), identifier)
+
+    def _component(self) -> dict:
+        return {
+            "id": "demo",
+            "kind": "binary",
+            "platforms": ["windows-x64"],
+            "upstream": "owner/repo",
+            "release": {"mode": "latest"},
+            "asset": {
+                "pattern": r"^demo-(?P<commit>[0-9a-f]+)\.bin$",
+                "version": "{commit}",
+                "commit": "{commit}",
+                "commit_repository": "player/mpv",
+            },
+            "license": {
+                "spdx": "MIT",
+                "files": [
+                    {
+                        "path": "LICENSE",
+                        "license": "MIT",
+                        "repository": "player/mpv",
+                        "ref": "{commit}",
+                    }
+                ],
+            },
+        }
+
+    def _release(self) -> dict:
+        return {
+            "tag_name": "v1",
+            "html_url": "https://example.invalid/v1",
+            "published_at": "2026-01-01T00:00:00Z",
+            "assets": [
+                {
+                    "name": "demo-abc123.bin",
+                    "id": 1,
+                    "url": "https://api.example.invalid/assets/1",
+                    "browser_download_url": "https://example.invalid/demo.bin",
+                    "size": 10,
+                    "digest": "sha256:" + "b" * 64,
+                }
+            ],
+        }
+
+    def test_resolver_records_pinned_license_provenance(self) -> None:
+        from unittest import mock
+
+        from build.upstream import resolve_component
+
+        with mock.patch("build.upstream.get_release", return_value=self._release()), \
+                mock.patch("build.upstream.resolve_commit", return_value="c" * 40), \
+                mock.patch("build.upstream.download_raw", return_value=b"MIT text\n"):
+            locked = resolve_component(self._component())
+
+        self.assertEqual(locked["commit"], "c" * 40)
+        entry = locked["license"]["files"][0]
+        self.assertEqual(entry["repository"], "player/mpv")
+        self.assertEqual(entry["commit"], "c" * 40)
+        self.assertEqual(entry["source_path"], "LICENSE")
+        self.assertEqual(
+            entry["url"],
+            f"https://raw.githubusercontent.com/player/mpv/{'c' * 40}/LICENSE",
+        )
+        self.assertEqual(entry["sha256"], hashlib.sha256(b"MIT text\n").hexdigest())
+
+    def test_unavailable_license_fails_closed(self) -> None:
+        from unittest import mock
+
+        from build.common import BuildError
+        from build.upstream import resolve_component
+
+        with mock.patch("build.upstream.get_release", return_value=self._release()), \
+                mock.patch("build.upstream.resolve_commit", return_value="c" * 40), \
+                mock.patch(
+                    "build.upstream.download_raw",
+                    side_effect=BuildError("license unavailable"),
+                ):
+            with self.assertRaises(BuildError):
+                resolve_component(self._component())
+
+
+class LockfileTests(unittest.TestCase):
+    def test_verified_bytes_match(self) -> None:
+        from build.lockfile import verify_lock_file
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "sources.lock.json"
+            path.write_text('{"components": {}}\n', encoding="utf-8")
+            digest = sha256_file(path)
+            self.assertEqual(verify_lock_file(path, digest), digest)
+
+    def test_changed_bytes_are_rejected(self) -> None:
+        from build.common import BuildError
+        from build.lockfile import verify_lock_file
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "sources.lock.json"
+            path.write_text('{"components": {}}\n', encoding="utf-8")
+            with self.assertRaises(BuildError):
+                verify_lock_file(path, "0" * 64)
+            with self.assertRaises(BuildError):
+                verify_lock_file(path, "not-a-sha256")
+
+
+class DecideTests(unittest.TestCase):
+    def _lock(self, version: str = "1", sha: str = "a" * 64, inputs: str = "inputs") -> dict:
+        return {
+            "inputs_hash": inputs,
+            "components": {
+                "mpv-windows": {
+                    "version": version,
+                    "commit": "c" * 40,
+                    "upstream": "owner/repo",
+                    "release_tag": "1",
+                    "release_url": "https://example.invalid/1",
+                    "asset_name": "a.7z",
+                    "sha256": sha,
+                    "license": {"spdx": "MIT", "files": []},
+                }
+            },
+        }
+
+    def _manifest(self, lock: dict) -> dict:
+        return {
+            "components": compact_components(lock),
+            "inputs_hash": lock["inputs_hash"],
+        }
+
+    def test_no_changes_does_not_release(self) -> None:
+        from build.decide import decide_release
+
+        lock = self._lock()
+        decision = decide_release(
+            force=False,
+            release={"tag_name": "v2026.10"},
+            manifest=self._manifest(lock),
+            old_lock=lock,
+            new_lock=lock,
+            local_inputs_hash=lock["inputs_hash"],
+        )
+        self.assertFalse(decision["release_needed"])
+        self.assertFalse(decision["upstream_changed"])
+        self.assertFalse(decision["inputs_changed"])
+        self.assertFalse(decision["lock_changed"])
+        self.assertEqual(decision["reason"], "no changes")
+
+    def test_force_always_releases(self) -> None:
+        from build.decide import decide_release
+
+        lock = self._lock()
+        decision = decide_release(
+            force=True,
+            release={"tag_name": "v2026.10"},
+            manifest=self._manifest(lock),
+            old_lock=lock,
+            new_lock=lock,
+            local_inputs_hash=lock["inputs_hash"],
+        )
+        self.assertTrue(decision["release_needed"])
+        self.assertIn("forced", decision["reason"])
+
+    def test_upstream_change_releases(self) -> None:
+        from build.decide import decide_release
+
+        old = self._lock()
+        new = self._lock(version="2", sha="d" * 64)
+        decision = decide_release(
+            force=False,
+            release={"tag_name": "v2026.10"},
+            manifest=self._manifest(old),
+            old_lock=old,
+            new_lock=new,
+            local_inputs_hash=new["inputs_hash"],
+        )
+        self.assertTrue(decision["release_needed"])
+        self.assertTrue(decision["upstream_changed"])
+        self.assertTrue(decision["lock_changed"])
+
+    def test_inputs_change_releases(self) -> None:
+        from build.decide import decide_release
+
+        lock = self._lock()
+        manifest = self._manifest(lock)
+        manifest["inputs_hash"] = "older-inputs"
+        decision = decide_release(
+            force=False,
+            release={"tag_name": "v2026.10"},
+            manifest=manifest,
+            old_lock=lock,
+            new_lock=lock,
+            local_inputs_hash=lock["inputs_hash"],
+        )
+        self.assertTrue(decision["release_needed"])
+        self.assertTrue(decision["inputs_changed"])
+        self.assertFalse(decision["upstream_changed"])
+
+    def test_missing_manifest_releases(self) -> None:
+        from build.decide import decide_release
+
+        lock = self._lock()
+        decision = decide_release(
+            force=False,
+            release={"tag_name": "v2026.10"},
+            manifest=None,
+            old_lock=lock,
+            new_lock=lock,
+            local_inputs_hash=lock["inputs_hash"],
+        )
+        self.assertTrue(decision["release_needed"])
+        self.assertIn("no readable latest manifest", decision["reason"])
+
+    def test_lock_only_repair_does_not_release(self) -> None:
+        from build.decide import decide_release
+
+        old = self._lock(version="0", sha="0" * 64)
+        new = self._lock()
+        decision = decide_release(
+            force=False,
+            release={"tag_name": "v2026.10"},
+            manifest=self._manifest(new),
+            old_lock=old,
+            new_lock=new,
+            local_inputs_hash=new["inputs_hash"],
+        )
+        self.assertFalse(decision["release_needed"])
+        self.assertTrue(decision["lock_changed"])
+
+
+class PlatformMpvTests(unittest.TestCase):
+    def _lock(self) -> dict:
+        return {
+            "components": {
+                "mpv-windows": {
+                    "version": "20261021-git-e471496c56",
+                    "commit": "a" * 40,
+                    "provides": "mpv",
+                    "platforms": ["windows-x64"],
+                },
+                "mpv-linux": {
+                    "version": "v0.41.0-1373-g9e2ed65eb",
+                    "commit": "b" * 40,
+                    "provides": "mpv",
+                    "platforms": ["linux-x64"],
+                },
+            }
+        }
+
+    def test_each_platform_keeps_its_own_mpv(self) -> None:
+        from build.release import mpv_for_platform
+
+        windows = mpv_for_platform(self._lock(), "windows-x64")
+        linux = mpv_for_platform(self._lock(), "linux-x64")
+        self.assertEqual(windows["id"], "mpv-windows")
+        self.assertEqual(windows["commit"], "a" * 40)
+        self.assertEqual(linux["id"], "mpv-linux")
+        self.assertEqual(linux["commit"], "b" * 40)
+        self.assertNotEqual(windows["commit"], linux["commit"])
+
+    def test_missing_mpv_is_fatal(self) -> None:
+        from build.common import BuildError
+        from build.release import mpv_for_platform
+
+        with self.assertRaises(BuildError):
+            mpv_for_platform({"components": {}}, "windows-x64")
+
+
+class LicenseVerifyTests(unittest.TestCase):
+    def _entry(self, **overrides) -> dict:
+        entry = {
+            "license": "MIT",
+            "commit": "a" * 40,
+            "source_url": "https://raw.githubusercontent.com/owner/repo/"
+            + "a" * 40
+            + "/LICENSE",
+            "sha256": "b" * 64,
+        }
+        entry.update(overrides)
+        return entry
+
+    def test_pinned_entry_passes(self) -> None:
+        from build.verify import check_license_entry
+
+        check_license_entry("licenses/demo/LICENSE", self._entry())
+
+    def test_branch_urls_are_rejected(self) -> None:
+        from build.common import BuildError
+        from build.verify import check_license_entry
+
+        for branch in ("main", "master", "latest"):
+            url = f"https://raw.githubusercontent.com/owner/repo/{branch}/LICENSE"
+            with self.assertRaises(BuildError, msg=branch):
+                check_license_entry("licenses/demo/LICENSE", self._entry(source_url=url))
+
+    def test_missing_commit_or_hash_is_rejected(self) -> None:
+        from build.common import BuildError
+        from build.verify import check_license_entry
+
+        with self.assertRaises(BuildError):
+            check_license_entry("licenses/demo/LICENSE", self._entry(commit=None))
+        with self.assertRaises(BuildError):
+            check_license_entry("licenses/demo/LICENSE", self._entry(sha256=None))
+
+    def test_manifest_license_hashes_must_match_index(self) -> None:
+        from build.common import BuildError
+        from build.verify import check_manifest_license_files
+
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = Path(temporary)
+            (stage / "licenses" / "demo").mkdir(parents=True)
+            (stage / "licenses" / "demo" / "LICENSE").write_text("MIT\n", encoding="utf-8")
+            (stage / "licenses" / "INDEX.json").write_text(
+                json.dumps(
+                    {
+                        "schema": 1,
+                        "files": [
+                            {
+                                "component": "demo",
+                                "file": "licenses/demo/LICENSE",
+                                "license": "MIT",
+                                "sha256": "b" * 64,
+                                "commit": "a" * 40,
+                                "source_url": "https://raw.githubusercontent.com/o/r/"
+                                + "a" * 40
+                                + "/LICENSE",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            good = {
+                "components": {
+                    "demo": {
+                        "license_files": [
+                            {"path": "LICENSE", "license": "MIT", "sha256": "b" * 64}
+                        ]
+                    }
+                }
+            }
+            check_manifest_license_files(stage, good)
+            bad_hash = {
+                "components": {
+                    "demo": {
+                        "license_files": [
+                            {"path": "LICENSE", "license": "MIT", "sha256": "c" * 64}
+                        ]
+                    }
+                }
+            }
+            with self.assertRaises(BuildError):
+                check_manifest_license_files(stage, bad_hash)
+            missing = {
+                "components": {
+                    "demo": {
+                        "license_files": [
+                            {"path": "OTHER", "license": "MIT", "sha256": "b" * 64}
+                        ]
+                    }
+                }
+            }
+            with self.assertRaises(BuildError):
+                check_manifest_license_files(stage, missing)
+
+
+class ReleaseManifestTests(unittest.TestCase):
+    VERSION = "2026.11"
+    SOURCE_SHA = "c" * 40
+
+    def _lock(self) -> dict:
+        return {
+            "schema": 1,
+            "components": {
+                "mpv-windows": {
+                    "version": "20261021-git-e471496c56",
+                    "commit": "a" * 40,
+                    "upstream": "shinchiro/mpv-winbuild-cmake",
+                    "release_tag": "20261021",
+                    "release_url": "https://example.invalid/windows",
+                    "asset_name": "mpv.7z",
+                    "sha256": "1" * 64,
+                    "provides": "mpv",
+                    "platforms": ["windows-x64"],
+                    "license": {"spdx": "GPL-2.0-or-later", "files": []},
+                },
+                "mpv-linux": {
+                    "version": "v0.41.0-1373-g9e2ed65eb",
+                    "commit": "b" * 40,
+                    "upstream": "pkgforge-dev/mpv-AppImage",
+                    "release_tag": "nightly",
+                    "release_url": "https://example.invalid/linux",
+                    "asset_name": "mpv.AppImage",
+                    "sha256": "2" * 64,
+                    "provides": "mpv",
+                    "platforms": ["linux-x64"],
+                    "license": {"spdx": "NOASSERTION", "files": []},
+                },
+            },
+        }
+
+    def _embedded(self, platform: str, identifier: str, version: str, commit: str, sha: str) -> dict:
+        return {
+            "schema": 1,
+            "playkit_version": self.VERSION,
+            "platform": platform,
+            "source_commit": self.SOURCE_SHA,
+            "inputs_hash": "i" * 64,
+            "mpv": {"id": identifier, "version": version, "commit": commit},
+            "components": {
+                identifier: {"version": version, "commit": commit, "sha256": sha}
+            },
+        }
+
+    def _dist(self, root: Path) -> Path:
+        dist = root / "dist"
+        dist.mkdir()
+        windows_top = f"mpv-PlayKit-{self.VERSION}-windows-x64"
+        linux_top = f"mpv-PlayKit-{self.VERSION}-linux-x64"
+        windows_manifest = self._embedded(
+            "windows-x64", "mpv-windows", "20261021-git-e471496c56", "a" * 40, "1" * 64
+        )
+        linux_manifest = self._embedded(
+            "linux-x64", "mpv-linux", "v0.41.0-1373-g9e2ed65eb", "b" * 40, "2" * 64
+        )
+        with zipfile.ZipFile(dist / f"{windows_top}.zip", "w") as archive:
+            archive.writestr(f"{windows_top}/manifest.json", json.dumps(windows_manifest))
+        payload = json.dumps(linux_manifest).encode("utf-8")
+        with tarfile.open(dist / f"{linux_top}.tar.gz", "w:gz") as archive:
+            info = tarfile.TarInfo(f"{linux_top}/manifest.json")
+            info.size = len(payload)
+            archive.addfile(info, io.BytesIO(payload))
+        return dist
+
+    def _args(self, root: Path, dist: Path, **extra) -> list[str]:
+        lock = root / "sources.lock.json"
+        lock.write_text(json.dumps(self._lock()), encoding="utf-8")
+        args = [
+            "--version", self.VERSION,
+            "--tag", "v" + self.VERSION,
+            "--dist", str(dist),
+            "--lock", str(lock),
+            "--repository", "owner/repo",
+            "--out-dir", str(root / "release"),
+            "--source-sha", self.SOURCE_SHA,
+        ]
+        for key, value in extra.items():
+            args.extend([key, value])
+        return args
+
+    def test_release_manifest_names_each_platform_mpv(self) -> None:
+        from build.release import main as release_main
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dist = self._dist(root)
+            self.assertEqual(release_main(self._args(root, dist)), 0)
+            manifest = read_json(root / "release" / "manifest.json")
+            windows = manifest["platforms"]["windows-x64"]
+            linux = manifest["platforms"]["linux-x64"]
+            self.assertEqual(windows["mpv_version"], "20261021-git-e471496c56")
+            self.assertEqual(windows["mpv_commit"], "a" * 40)
+            self.assertEqual(linux["mpv_version"], "v0.41.0-1373-g9e2ed65eb")
+            self.assertEqual(linux["mpv_commit"], "b" * 40)
+            self.assertNotEqual(windows["mpv_commit"], linux["mpv_commit"])
+            notes = (root / "release" / "release-notes.md").read_text(encoding="utf-8")
+            self.assertIn("20261021-git-e471496c56", notes)
+            self.assertIn("v0.41.0-1373-g9e2ed65eb", notes)
+
+    def test_release_rejects_a_package_from_another_commit(self) -> None:
+        from build.common import BuildError
+        from build.release import main as release_main
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dist = self._dist(root)
+            args = self._args(root, dist)
+            args[args.index("--source-sha") + 1] = "d" * 40
+            with self.assertRaises(BuildError):
+                release_main(args)
+
+    def test_release_rejects_a_different_lock(self) -> None:
+        from build.common import BuildError
+        from build.release import main as release_main
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dist = self._dist(root)
+            args = self._args(root, dist, **{"--expected-lock-sha256": "0" * 64})
+            with self.assertRaises(BuildError):
+                release_main(args)
+
+
+class WorkflowTests(unittest.TestCase):
+    WORKFLOW_DIR = ROOT / ".github" / "workflows"
+
+    def _workflow(self, name: str) -> dict:
+        from build.common import load_yaml
+
+        return load_yaml(self.WORKFLOW_DIR / name)
+
+    def _triggers(self, name: str) -> dict:
+        data = self._workflow(name)
+        triggers = data.get("on")
+        if triggers is None:
+            # PyYAML follows YAML 1.1 and resolves the bare key `on` to True.
+            triggers = data.get(True)
+        return triggers or {}
+
+    def _uses(self, data: dict):
+        for job in (data.get("jobs") or {}).values():
+            if job.get("uses"):
+                yield job["uses"]
+            for step in job.get("steps") or []:
+                if step.get("uses"):
+                    yield step["uses"]
+
+    def _runs(self, job: dict) -> str:
+        return "\n".join(str(step.get("run", "")) for step in job.get("steps") or [])
+
+    def test_every_remote_action_is_pinned_to_a_full_commit(self) -> None:
+        pattern = re.compile(
+            r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*@[0-9a-f]{40}$"
+        )
+        for path in sorted(self.WORKFLOW_DIR.glob("*.yml")):
+            data = self._workflow(path.name)
+            for uses in self._uses(data):
+                if uses.startswith("./"):
+                    continue
+                self.assertRegex(uses, pattern, f"{path.name}: {uses}")
+
+    def test_candidate_lock_inputs_are_declared(self) -> None:
+        for name in ("build.yml", "release.yml"):
+            inputs = (self._triggers(name).get("workflow_call") or {}).get("inputs") or {}
+            self.assertIn("lock_artifact", inputs, name)
+            self.assertIn("lock_sha256", inputs, name)
+
+    def test_monthly_builds_the_candidate_before_promoting_it(self) -> None:
+        jobs = self._workflow("monthly-update.yml")["jobs"]
+        build = jobs["build"]
+        self.assertEqual(build["needs"], "resolve")
+        self.assertEqual(build["uses"], "./.github/workflows/build.yml")
+        self.assertEqual(
+            build["with"]["lock_artifact"], "${{ needs.resolve.outputs.lock_artifact }}"
+        )
+        self.assertEqual(
+            build["with"]["lock_sha256"], "${{ needs.resolve.outputs.lock_sha256 }}"
+        )
+        self.assertEqual(
+            build["with"]["source_sha"], "${{ needs.resolve.outputs.candidate_sha }}"
+        )
+
+        commit = jobs["commit-lock"]
+        self.assertEqual(commit["needs"], ["resolve", "build"])
+        self.assertIn("always()", commit["if"])
+        self.assertIn("needs.build.result == 'success'", commit["if"])
+        self.assertIn("needs.resolve.outputs.release_needed != 'true'", commit["if"])
+
+        release = jobs["release"]
+        self.assertIn("build", release["needs"])
+        self.assertIn("commit-lock", release["needs"])
+        self.assertEqual(
+            release["with"]["source_sha"], "${{ needs.commit-lock.outputs.final_sha }}"
+        )
+        self.assertEqual(
+            release["with"]["lock_sha256"], "${{ needs.resolve.outputs.lock_sha256 }}"
+        )
+
+    def test_candidate_artifact_always_matches_the_repository_lock(self) -> None:
+        jobs = self._workflow("monthly-update.yml")["jobs"]
+        runs = self._runs(jobs["resolve"])
+        self.assertIn("cp .work/candidate/sources.lock.json sources.lock.json", runs)
+        # When only generated_at would differ, the repository lock is used
+        # verbatim so every consumer sees identical bytes.
+        self.assertIn("cp sources.lock.json .work/candidate/sources.lock.json", runs)
+        self.assertLess(
+            runs.index("cp sources.lock.json .work/candidate/sources.lock.json"),
+            runs.index('lock_sha="$(python'),
+        )
+
+    def test_only_the_commit_job_updates_main(self) -> None:
+        jobs = self._workflow("monthly-update.yml")["jobs"]
+        for name, job in jobs.items():
+            runs = self._runs(job)
+            if name == "commit-lock":
+                self.assertIn("refs/heads/${TARGET_BRANCH}", runs)
+            else:
+                self.assertNotIn("refs/heads/${TARGET_BRANCH}", runs)
+                self.assertNotIn(":refs/heads/main", runs)
+        resolve_runs = self._runs(jobs["resolve"])
+        self.assertIn("refs/heads/${branch}", resolve_runs)
+        self.assertNotIn("TARGET_BRANCH", resolve_runs)
+
+    def test_both_platforms_install_the_same_candidate_lock(self) -> None:
+        jobs = self._workflow("build.yml")["jobs"]
+        for name in ("windows-x64", "linux-x64"):
+            steps = jobs[name]["steps"]
+            by_name = {step.get("name"): step for step in steps}
+            download = by_name["Download candidate lock"]
+            install = by_name["Install verified candidate lock"]
+            self.assertEqual(download["with"]["name"], "${{ inputs.lock_artifact }}")
+            self.assertIn("inputs.lock_sha256", install["run"])
+            self.assertIn(
+                "cp .work/candidate-lock/sources.lock.json sources.lock.json",
+                install["run"],
+            )
+            names = [step.get("name") for step in steps]
+            self.assertLess(
+                names.index("Install verified candidate lock"),
+                names.index("Fetch upstream assets"),
+            )
+
+    def test_build_workflow_never_commits(self) -> None:
+        text = (self.WORKFLOW_DIR / "build.yml").read_text(encoding="utf-8")
+        self.assertNotIn("git commit", text)
+        self.assertNotIn("git push", text)
+
+    def test_release_verifies_the_candidate_lock_and_target(self) -> None:
+        job = self._workflow("release.yml")["jobs"]["release"]
+        runs = self._runs(job)
+        self.assertIn("build.lockfile", runs)
+        self.assertIn(
+            "cmp .work/candidate-lock/sources.lock.json sources.lock.json", runs
+        )
+        self.assertIn("--expected-lock-sha256", runs)
+        self.assertIn('--target "$SOURCE_SHA"', runs)
+        self.assertIn("refs/tags/$TAG", runs)
+        self.assertIn("release $TAG already exists", runs)
+
+    def test_force_input_is_forwarded_to_decide(self) -> None:
+        job = self._workflow("monthly-update.yml")["jobs"]["resolve"]
+        decide = next(step for step in job["steps"] if step.get("id") == "decide")
+        self.assertEqual(decide["env"]["FORCE"], "${{ inputs.force }}")
+        self.assertIn("--force", decide["run"])
+
+    def test_fork_pull_requests_do_not_run_build_jobs(self) -> None:
+        jobs = self._workflow("build.yml")["jobs"]
+        for name in ("tests", "windows-x64", "linux-x64"):
+            self.assertIn(
+                "pull_request.head.repo.full_name == github.repository",
+                jobs[name]["if"],
+            )
 
 
 if __name__ == "__main__":

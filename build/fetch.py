@@ -20,6 +20,7 @@ from .common import (
     sha256_file,
     write_json,
 )
+from .upstream import FULL_COMMIT
 
 USER_AGENT = "mpv-PlayKit-build/1.0"
 
@@ -95,14 +96,36 @@ def fetch_component(component: dict[str, Any], work: Path) -> dict[str, Any]:
         relative = Path(item["path"])
         if relative.is_absolute() or ".." in relative.parts:
             fail(f"{identifier}: unsafe license path {relative}")
+        # A lock entry must pin the license text to a full commit and hash.
+        # Refuse to build from an old/unpinned lock instead of downloading a
+        # floating branch.
+        expected_license = item.get("sha256")
+        pinned_commit = str(item.get("commit") or "")
+        if not expected_license or not FULL_COMMIT.fullmatch(pinned_commit):
+            fail(
+                f"{identifier}: license {relative} is not pinned to a commit and sha256; "
+                "regenerate sources.lock.json"
+            )
+        if f"/{pinned_commit}/" not in item.get("url", ""):
+            fail(f"{identifier}: license {relative} URL does not use its pinned commit")
         license_dest = work / "licenses" / identifier / version_dir / relative
-        log(f"fetching license {identifier}/{relative}")
+        log(f"fetching license {identifier}/{relative} @ {pinned_commit}")
         license_hash, license_size = download(item["url"], license_dest)
+        if license_hash != expected_license:
+            license_dest.unlink(missing_ok=True)
+            fail(
+                f"{identifier}: license {relative} sha256 mismatch: "
+                f"expected {expected_license}, got {license_hash}"
+            )
         license_entries.append(
             {
                 "path": str(relative).replace("\\", "/"),
                 "local_path": str(license_dest.relative_to(work)).replace("\\", "/"),
                 "license": item.get("license"),
+                "repository": item.get("repository"),
+                "commit": pinned_commit,
+                "source_path": item.get("source_path"),
+                "scope": item.get("scope"),
                 "url": item["url"],
                 "sha256": license_hash,
                 "size": license_size,

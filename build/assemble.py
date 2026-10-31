@@ -175,7 +175,12 @@ def copy_licenses(stage: Path, work: Path, fetched: dict[str, Any], lock: dict[s
                 "source_url": item.get("url"),
                 "sha256": item.get("sha256"),
             }
-            scope = next(
+            # Pinned provenance: repository, full commit and the path inside
+            # that repository.  Never a branch name.
+            for key in ("repository", "commit", "source_path"):
+                if item.get(key):
+                    record[key] = item[key]
+            scope = item.get("scope") or next(
                 (
                     part.get("scope")
                     for part in parts
@@ -212,6 +217,7 @@ def write_metadata(
             fail(f"{identifier}: fetched hash differs from lock")
         components[identifier] = {
             "version": locked.get("version"),
+            "commit": locked.get("commit"),
             "upstream": locked.get("upstream"),
             "release_tag": locked.get("release_tag"),
             "release_url": locked.get("release_url"),
@@ -219,6 +225,28 @@ def write_metadata(
             "sha256": entry.get("sha256"),
             **manifest_license_fields(locked.get("license")),
         }
+
+    # Record the exact mpv build used by this platform.  Windows and Linux may
+    # legitimately use different mpv commits, so the package never publishes a
+    # single ambiguous "mpv version".
+    mpv_components = [
+        (identifier, lock["components"][identifier])
+        for identifier in fetched
+        if lock["components"][identifier].get("provides") == "mpv"
+    ]
+    if len(mpv_components) != 1:
+        fail(
+            f"{platform}: expected exactly one component with provides=mpv, "
+            f"found {len(mpv_components)}"
+        )
+    mpv_identifier, mpv_locked = mpv_components[0]
+    mpv_info = {
+        "id": mpv_identifier,
+        "version": mpv_locked.get("version"),
+        "commit": mpv_locked.get("commit"),
+    }
+    if not mpv_info["version"] or not mpv_info["commit"]:
+        fail(f"{platform}: mpv component {mpv_identifier} has no version/commit")
 
     version_info = {
         "schema": 1,
@@ -228,6 +256,7 @@ def write_metadata(
         "built_at": built_at,
         "source_commit": source_sha,
         "inputs_hash": inputs_hash,
+        "mpv": mpv_info,
         "components": components,
     }
     write_json(stage / "playkit-version.json", version_info)

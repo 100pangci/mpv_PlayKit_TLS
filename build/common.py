@@ -104,10 +104,27 @@ def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], d
         if not license_files:
             fail(f"{identifier}: license metadata has no files")
         for item in license_files:
-            if not item.get("path") or not item.get("url"):
-                fail(f"{identifier}: license file needs path and url")
+            if not item.get("path"):
+                fail(f"{identifier}: license file needs a path")
             if not item.get("license"):
                 fail(f"{identifier}: license file {item.get('path')} needs an SPDX id")
+            # License texts are pinned by repository + ref.  The ref may be a
+            # tag, branch or short commit in the manifest, but resolve turns it
+            # into a full commit and the lock/build only use that commit.
+            # A literal URL is rejected so a floating branch cannot slip in.
+            if item.get("url"):
+                fail(
+                    f"{identifier}: license file {item['path']} must use repository/ref, "
+                    "not a literal url"
+                )
+            if not item.get("repository") or not item.get("ref"):
+                fail(f"{identifier}: license file {item['path']} needs repository and ref")
+            repository = str(item["repository"])
+            if repository.count("/") != 1 or any(part in ("", ".", "..") for part in repository.split("/")):
+                fail(f"{identifier}: license file {item['path']} has an invalid repository")
+            source_path = str(item.get("source_path") or item["path"])
+            if source_path.startswith("/") or ".." in Path(source_path).parts:
+                fail(f"{identifier}: license file {item['path']} has an unsafe source_path")
     return project, components
 
 
@@ -133,6 +150,37 @@ def scoped_license_fields(license_info: dict[str, Any] | None) -> dict[str, Any]
     return result
 
 
+def license_scope_for(license_info: dict[str, Any] | None, license_id: str | None) -> str | None:
+    """Return the scope declared for one SPDX id inside a component."""
+    for part in (license_info or {}).get("parts") or []:
+        if part.get("license") == license_id:
+            return str(part.get("scope")) or None
+    return None
+
+
+def license_files_summary(license_files: Any) -> list[dict[str, Any]]:
+    """Content-only license file provenance used in manifests.
+
+    The commit and URL are recorded in sources.lock.json and licenses/INDEX.json
+    but deliberately not compared here: re-pinning a license source to a newer
+    commit with unchanged text must not force a new release.
+    """
+    if not isinstance(license_files, list):
+        return []
+    summary = []
+    for item in license_files:
+        if not isinstance(item, dict):
+            continue
+        summary.append(
+            {
+                "path": item.get("path"),
+                "license": item.get("license"),
+                "sha256": item.get("sha256"),
+            }
+        )
+    return sorted(summary, key=lambda entry: str(entry.get("path")))
+
+
 def manifest_license_fields(license_info: dict[str, Any] | None) -> dict[str, Any]:
     """Component license fields for manifest.json and playkit-version.json."""
     info = license_info or {}
@@ -142,6 +190,7 @@ def manifest_license_fields(license_info: dict[str, Any] | None) -> dict[str, An
         fields["license_scope"] = scoped["scope"]
     if "parts" in scoped:
         fields["license_parts"] = scoped["parts"]
+    fields["license_files"] = license_files_summary(info.get("files"))
     return fields
 
 
