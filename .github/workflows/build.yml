@@ -103,6 +103,7 @@ jobs:
           path: dist/out
           key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-windows-x64
           enableCrossOsArchive: true
+          compressionMethod: gzip
 
   linux-x64:
     needs: tests
@@ -159,3 +160,4 @@ jobs:
         with:
           path: dist/out
           key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-linux-x64
+          compressionMethod: gzip

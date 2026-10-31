@@ -41,15 +41,17 @@ jobs:
       - name: Restore Windows package
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: dist/windows-x64
+          path: dist/out
           key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-windows-x64
           enableCrossOsArchive: true
+          compressionMethod: gzip
           fail-on-cache-miss: true
       - name: Restore Linux package
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: dist/linux-x64
+          path: dist/out
           key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-linux-x64
+          compressionMethod: gzip
           fail-on-cache-miss: true
       - name: Build release metadata
         run: |
