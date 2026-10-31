@@ -158,7 +158,8 @@ def copy_licenses(stage: Path, work: Path, fetched: dict[str, Any], lock: dict[s
                     "component": identifier,
                     "version": component.get("version"),
                     "upstream": component.get("upstream"),
-                    "license": (component.get("license") or {}).get("spdx"),
+                    "license": item.get("license")
+                    or (component.get("license") or {}).get("spdx"),
                     "file": f"licenses/{identifier}/{item['path']}",
                     "source_url": item.get("url"),
                     "sha256": item.get("sha256"),

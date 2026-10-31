@@ -136,6 +136,7 @@ def resolve_component(component: dict[str, Any]) -> dict[str, Any]:
         license_files.append(
             {
                 "path": item["path"],
+                "license": item.get("license"),
                 "url": render(item["url"], context),
             }
         )

@@ -17,8 +17,10 @@ components:
       spdx: GPL-2.0-or-later
       files:
         - path: LICENSE.GPL
+          license: GPL-2.0-or-later
           url: 'https://raw.githubusercontent.com/mpv-player/mpv/{commit}/LICENSE.GPL'
         - path: LICENSE.LGPL
+          license: LGPL-2.1-or-later
           url: 'https://raw.githubusercontent.com/mpv-player/mpv/{commit}/LICENSE.LGPL'
     extract:
       type: 7z
@@ -51,6 +53,7 @@ components:
       spdx: GPL-3.0-or-later AND GPL-2.0-or-later
       files:
         - path: LICENSE
+          license: GPL-3.0-or-later
           url: 'https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/main/LICENSE'
     extract:
       type: appimage
@@ -78,8 +81,10 @@ components:
       spdx: Unlicense
       files:
         - path: LICENSE
+          license: Unlicense
           url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/LICENSE'
         - path: THIRD_PARTY_LICENSES.txt
+          license: NOASSERTION
           url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/THIRD_PARTY_LICENSES.txt'
     install:
       - source: yt-dlp.exe
@@ -98,8 +103,10 @@ components:
       spdx: Unlicense
       files:
         - path: LICENSE
+          license: Unlicense
           url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/LICENSE'
         - path: THIRD_PARTY_LICENSES.txt
+          license: NOASSERTION
           url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/THIRD_PARTY_LICENSES.txt'
     install:
       - source: yt-dlp_linux

@@ -15,9 +15,11 @@ components:
       spdx: LGPL-2.1-or-later AND Apache-2.0
       files:
         - path: LICENSE.LGPL
+          license: LGPL-2.1-or-later
           url: 'https://raw.githubusercontent.com/tomasklaen/uosc/{release_tag}/LICENSE.LGPL'
         # uosc_icons.otf is Material Icons Round (Copyright Google LLC).
         - path: Material-Icons-Apache-2.0.txt
+          license: Apache-2.0
           url: 'https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE'
     extract:
       type: zip

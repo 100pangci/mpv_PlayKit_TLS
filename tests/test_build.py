@@ -26,6 +26,19 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("uosc", components)
         self.assertIn("lxgw-wenkai-mono-lite", components)
 
+    def test_license_files_have_spdx(self) -> None:
+        _, components = load_manifests()
+        labels = {}
+        for identifier, component in components.items():
+            for item in component["license"]["files"]:
+                self.assertTrue(item.get("license"), f"{identifier}/{item.get('path')}")
+                labels[(identifier, item["path"])] = item["license"]
+        self.assertEqual(labels[("mpv-windows", "LICENSE.GPL")], "GPL-2.0-or-later")
+        self.assertEqual(labels[("mpv-windows", "LICENSE.LGPL")], "LGPL-2.1-or-later")
+        self.assertEqual(labels[("uosc", "LICENSE.LGPL")], "LGPL-2.1-or-later")
+        self.assertEqual(labels[("uosc", "Material-Icons-Apache-2.0.txt")], "Apache-2.0")
+        self.assertEqual(labels[("yt-dlp-windows", "THIRD_PARTY_LICENSES.txt")], "NOASSERTION")
+
     def test_asset_patterns(self) -> None:
         _, components = load_manifests()
         samples = {

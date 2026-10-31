@@ -35,8 +35,11 @@ licenses/
   yt-dlp-linux/THIRD_PARTY_LICENSES.txt
 ```
 
-具体文件名以 `licenses/INDEX.json` 为准。`SHA256SUMS` 覆盖发布资产，`manifest.json`
-同时记录上游资产哈希和 `sources.lock.json` 的内容哈希。
+具体文件名以 `licenses/INDEX.json` 为准。`INDEX.json` 的 `license` 字段是**逐文件
+SPDX**（例如 `LICENSE.LGPL` 标为 `LGPL-2.1-or-later`，`LICENSE.GPL` 标为
+`GPL-2.0-or-later`）；`manifest.json` 中的 `components.*.license` 是组件级聚合。
+`SHA256SUMS` 覆盖发布资产，`manifest.json` 同时记录上游资产哈希和
+`sources.lock.json` 的内容哈希。
 
 ## 分发注意
 

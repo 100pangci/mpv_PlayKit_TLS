@@ -102,6 +102,7 @@ def fetch_component(component: dict[str, Any], work: Path) -> dict[str, Any]:
             {
                 "path": str(relative).replace("\\", "/"),
                 "local_path": str(license_dest.relative_to(work)).replace("\\", "/"),
+                "license": item.get("license"),
                 "url": item["url"],
                 "sha256": license_hash,
                 "size": license_size,

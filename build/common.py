@@ -86,6 +86,14 @@ def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], d
             fail(f"{identifier}: missing asset.pattern")
         if not component.get("license"):
             fail(f"{identifier}: missing license metadata")
+        license_files = (component.get("license") or {}).get("files") or []
+        if not license_files:
+            fail(f"{identifier}: license metadata has no files")
+        for item in license_files:
+            if not item.get("path") or not item.get("url"):
+                fail(f"{identifier}: license file needs path and url")
+            if not item.get("license"):
+                fail(f"{identifier}: license file {item.get('path')} needs an SPDX id")
     return project, components
 
 
