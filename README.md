@@ -123,9 +123,10 @@ SHA-256。任何一项失败都不会发布。
 
 ## 许可证
 
-- 本仓库原创代码：MIT，见 [LICENSE](LICENSE)。
+- 本仓库原创代码：**GPL-3.0-or-later**，见 [LICENSE](LICENSE)；版权与第三方
+  组件边界、GPL 源码提供说明见 [NOTICE](NOTICE)。
 - 第三方组件：各自保留上游许可证，构建时下载到包内 `licenses/`；汇总见
-  [THIRD_PARTY.md](THIRD_PARTY.md)。
+  [THIRD_PARTY.md](THIRD_PARTY.md)。本项目不改变这些组件的许可证。
 - 基线审计与历史 PlayKit 材料的处置：见 [LICENSE_PROVENANCE.md](LICENSE_PROVENANCE.md)。
 - 本仓库不包含也不授权任何未解决许可证的历史 PlayKit Lua 或 GLSL 文件。
 

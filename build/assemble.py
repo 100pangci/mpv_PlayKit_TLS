@@ -46,7 +46,8 @@ README_TEMPLATE = """mpv PlayKit {version} ({platform})
 Windows: 双击 mpv.exe
 Linux:   在终端运行 ./mpv-playkit
 
-portable_config/ 内是完整配置。第三方组件及许可证见 licenses/。
+portable_config/ 内是完整配置。本项目原创部分按 GPL-3.0-or-later 分发，
+见 LICENSE 与 NOTICE；第三方组件保留各自许可证，见 THIRD_PARTY.md 与 licenses/。
 
 更新检查
 ========
@@ -166,7 +167,7 @@ def copy_licenses(stage: Path, work: Path, fetched: dict[str, Any], lock: dict[s
                 }
             )
     write_json(stage / "licenses" / "INDEX.json", {"schema": 1, "files": index})
-    for name in ("THIRD_PARTY.md", "LICENSE_PROVENANCE.md", "LICENSE"):
+    for name in ("THIRD_PARTY.md", "LICENSE_PROVENANCE.md", "LICENSE", "NOTICE"):
         path = ROOT / name
         if path.is_file():
             copy_file(path, stage / name)
@@ -242,6 +243,8 @@ def verify_stage_minimum(stage: Path, platform: str) -> None:
         portable / "scripts" / "thumbfast.lua",
         stage / "manifest.json",
         stage / "playkit-version.json",
+        stage / "LICENSE",
+        stage / "NOTICE",
     ]
     if platform == "windows-x64":
         required.extend([stage / "mpv.exe", stage / "yt-dlp.exe"])

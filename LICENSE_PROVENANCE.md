@@ -56,6 +56,8 @@ its build artifacts. Their functionality was reimplemented or replaced:
 | `thumb_engine/{batch,helper,main,process,winapi}.lua` | Merged into the original `scripts/local/thumbfast.lua`; no `thumb_engine/` directory exists |
 
 uosc itself is downloaded unmodified from the upstream release at build time. The
-repository's original code is MIT-licensed; every third-party component remains under
-its own upstream license, recorded in `sources.lock.json`, `THIRD_PARTY.md`, and the
-package's `licenses/INDEX.json`. See `docs/lua-disposition.md` for the full mapping.
+repository's original code is licensed under GPL-3.0-or-later; every third-party
+component remains under its own upstream license, recorded in
+`sources.lock.json`, `THIRD_PARTY.md`, and the package's `licenses/INDEX.json`.
+See `docs/lua-disposition.md` for the full mapping and `NOTICE` for the
+third-party boundary and corresponding-source information.

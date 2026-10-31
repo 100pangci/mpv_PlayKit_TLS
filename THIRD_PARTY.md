@@ -13,8 +13,8 @@
 | LXGW WenKai Mono Lite | [lxgw/LxgwWenKai-Lite](https://github.com/lxgw/LxgwWenKai-Lite) | 中文字幕字体 | OFL-1.1 | `portable_config/fonts/LXGWWenKaiMonoLite-Regular.ttf` |
 
 本项目自己的 Lua（`idle-brand`、`save_global_props`、`input_plus`、`thumbfast`、
-`update-check`）为原创实现，按仓库 MIT 许可证分发，不属于第三方组件。缩略图功能
-不包含历史 `thumb_engine` 或第三方 thumbfast 的代码。
+`update-check`）为原创实现，按仓库 **GPL-3.0-or-later** 分发，不属于第三方组件。
+缩略图功能不包含历史 `thumb_engine` 或第三方 thumbfast 的代码。
 
 ## 包内许可证文件
 

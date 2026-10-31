@@ -122,7 +122,7 @@ class LockTests(unittest.TestCase):
                     "asset_name": "a.7z",
                     "sha256": "abc",
                     "release_url": "https://example.invalid",
-                    "license": "MIT",
+                    "license": "GPL-3.0-or-later",
                 }
             }
         }

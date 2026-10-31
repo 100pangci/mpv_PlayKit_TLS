@@ -1,0 +1,40 @@
+mpv PlayKit TLS
+Copyright (C) 2026 mpv PlayKit TLS contributors
+
+This project's original material - configuration files, build tooling,
+documentation, and the Lua scripts under scripts/local/ and updater/ - is
+licensed under the GNU General Public License, version 3 or (at your option)
+any later version.  The full license text is in LICENSE.
+
+Third-party components are not covered by the project's GPL license.  They are
+fetched at build time and remain under their own upstream licenses:
+
+  uosc                         LGPL-2.1-or-later
+  mpv (Windows build)          GPL-2.0-or-later / LGPL-2.1-or-later
+  mpv (Linux AppImage)         GPL-3.0-or-later / GPL-2.0-or-later
+  LXGW WenKai Mono Lite        OFL-1.1
+  Material Icons               Apache-2.0
+  yt-dlp                       Unlicense
+
+Exact files, source URLs and SHA-256 hashes are recorded in THIRD_PARTY.md,
+sources.lock.json, manifest.json and the package's licenses/INDEX.json.
+
+Historical mpv_PlayKit material whose license could not be established is not
+included in this repository or its packages.  See LICENSE_PROVENANCE.md.
+
+Corresponding source
+--------------------
+The complete source for this project's original material is this repository at
+the release's source_commit (recorded in manifest.json).
+
+The GPL-licensed mpv binaries are built from the exact upstream commits recorded
+in sources.lock.json.  Their source is available from:
+
+  https://github.com/mpv-player/mpv/tree/<commit>
+  https://github.com/pkgforge-dev/mpv-AppImage
+  https://github.com/shinchiro/mpv-winbuild-cmake
+
+Written offer: for three years after a release is distributed, the distributor
+will provide the complete corresponding source for the GPL-licensed binaries on
+request through this repository's issue tracker, at no charge beyond the cost of
+physically performing the source distribution.

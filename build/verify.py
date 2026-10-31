@@ -26,6 +26,8 @@ REQUIRED = [
     "playkit-version.json",
     "licenses/INDEX.json",
     "README.txt",
+    "LICENSE",
+    "NOTICE",
 ]
 WINDOWS_REQUIRED = ["mpv.exe", "yt-dlp.exe"]
 LINUX_REQUIRED = ["mpv/AppRun", "mpv-playkit", "yt-dlp"]
