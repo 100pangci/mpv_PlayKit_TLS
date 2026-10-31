@@ -11,6 +11,7 @@ from .common import PLATFORM_OS, ROOT, fail, log
 
 FATAL_PATTERNS = re.compile(
     r"(Error parsing option|Failed to parse|script error|Lua error|"
+    r"Error loading (?:Lua )?script|"
     r"Could not open|Failed to open|Traceback|No such file or directory)",
     re.IGNORECASE,
 )

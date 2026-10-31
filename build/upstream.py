@@ -8,7 +8,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from .common import BuildError, canonical_hash, fail, log, sha256_bytes
+from .common import BuildError, canonical_hash, fail, log, scoped_license_fields, sha256_bytes
 
 API_ROOT = "https://api.github.com"
 USER_AGENT = "mpv-PlayKit-build/1.0"
@@ -169,6 +169,7 @@ def resolve_component(component: dict[str, Any]) -> dict[str, Any]:
         "license": {
             "spdx": license_info.get("spdx"),
             "files": license_files,
+            **scoped_license_fields(license_info),
         },
     }
     if not locked["sha256"]:

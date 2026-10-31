@@ -6,9 +6,9 @@
 | 组件 | 上游 | 用途 | 许可证 | 包内位置 |
 | --- | --- | --- | --- | --- |
 | mpv (Windows) | [shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake) | 播放器 | GPL-2.0-or-later / LGPL-2.1-or-later（按组件） | `mpv.exe`, `mpv.com`, `d3dcompiler_43.dll` |
-| mpv (Linux) | [pkgforge-dev/mpv-AppImage](https://github.com/pkgforge-dev/mpv-AppImage) | 播放器运行时 | GPL-3.0-or-later AND GPL-2.0-or-later；其中 mpv 本体为 GPL-2.0-or-later / LGPL-2.1-or-later | `mpv/` |
+| mpv (Linux) | [pkgforge-dev/mpv-AppImage](https://github.com/pkgforge-dev/mpv-AppImage) | 播放器运行时 | 按对象分别适用：GPL-3.0-or-later（AppImage 打包/运行时）；GPL-2.0-or-later / LGPL-2.1-or-later（其中 mpv 本体） | `mpv/` |
 | yt-dlp | [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) | 在线视频解析 | Unlicense | `yt-dlp.exe` / `yt-dlp` |
-| uosc | [tomasklaen/uosc](https://github.com/tomasklaen/uosc) | UI 与菜单 | LGPL-2.1-or-later；内含 MIT（`lib/fzy.lua`）、MPL-2.0（`lib/utils.lua` 的 thumbfast FFI 片段）、Apache-2.0（图标字体）；`main.lua` 含本项目构建时补丁（见下文） | `portable_config/scripts/uosc/` |
+| uosc | [tomasklaen/uosc](https://github.com/tomasklaen/uosc) | UI 与菜单 | 按对象分别适用：LGPL-2.1-or-later（uosc 主体）；MIT（`lib/fzy.lua`）、MPL-2.0（`lib/utils.lua` 的 thumbfast FFI 片段）、Apache-2.0（图标字体）；`main.lua` 含本项目构建时补丁（见下文） | `portable_config/scripts/uosc/` |
 | uosc / Material Icons | [google/material-design-icons](https://github.com/google/material-design-icons) | uosc 图标字体 | Apache-2.0 | `portable_config/fonts/uosc_icons.otf` |
 | fzy (Lua) | [swarn/fzy-lua](https://github.com/swarn/fzy-lua) | uosc 菜单模糊匹配 | MIT | `portable_config/scripts/uosc/lib/fzy.lua` |
 | thumbfast FFI 片段 | [po5/thumbfast](https://github.com/po5/thumbfast) | uosc 缩略图 FFI 声明 | MPL-2.0 | `portable_config/scripts/uosc/lib/utils.lua` |
@@ -52,9 +52,13 @@ licenses/
 
 具体文件名以 `licenses/INDEX.json` 为准。`INDEX.json` 的 `license` 字段是**逐文件
 SPDX**（例如 `LICENSE.LGPL` 标为 `LGPL-2.1-or-later`，`LICENSE.GPL` 标为
-`GPL-2.0-or-later`）；`manifest.json` 中的 `components.*.license` 是组件级聚合。
-`SHA256SUMS` 覆盖发布资产，`manifest.json` 同时记录上游资产哈希和
-`sources.lock.json` 的内容哈希。
+`GPL-2.0-or-later`）；当组件声明了按对象区分的范围时，对应条目还会带有
+`scope`，说明该许可证文本覆盖的文件或片段。`manifest.json` 中的 `components.*.license` 是组件级聚合：
+当同一组件内的不同文件/资源分别适用不同许可证时，该字段为 `NOASSERTION`，并用
+`license_scope: component-aggregate` 与 `license_parts` 按对象列出各自适用的
+许可证和作用域；这样不会把多个许可证误读为对同一作品共同生效。`SHA256SUMS`
+覆盖发布资产，`manifest.json` 同时记录上游资产哈希和 `sources.lock.json`
+的内容哈希。
 
 ## 分发注意
 

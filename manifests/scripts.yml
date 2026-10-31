@@ -1,7 +1,8 @@
 schema: 1
-# Upstream scripts and their assets.  uosc is fetched unmodified from its
-# official release and then receives one small, documented build-time patch
-# (build/patch_uosc.py) that adds the automatic UI scale; see THIRD_PARTY.md.
+# Upstream scripts and their assets.  uosc is fetched from its official
+# release; the build applies one small, documented patch to
+# portable_config/scripts/uosc/main.lua (build/patch_uosc.py) that adds the
+# automatic UI scale.  All other uosc files remain upstream; see THIRD_PARTY.md.
 # Local scripts live in scripts/local/ instead.
 components:
   - id: uosc
@@ -14,10 +15,22 @@ components:
       pattern: '^uosc\.zip$'
       version: '{release_tag}'
     license:
-      # uosc itself is LGPL-2.1-or-later.  Its bundled lib/fzy.lua is MIT and
-      # lib/utils.lua contains an MPL-2.0 FFI snippet from po5/thumbfast; the
-      # notices stay in those files, and the full texts are shipped too.
-      spdx: LGPL-2.1-or-later AND Apache-2.0 AND MIT AND MPL-2.0
+      # The component bundles works under several licenses that apply to
+      # different files/resources, not jointly to one work.  The aggregate is
+      # therefore NOASSERTION; `parts` records the actual scopes and `files`
+      # carries the per-file SPDX labels.  The notices stay in the upstream
+      # files and the full texts are shipped in licenses/uosc/.
+      spdx: NOASSERTION
+      scope: component-aggregate
+      parts:
+        - license: LGPL-2.1-or-later
+          scope: 'uosc scripts and UI, except the files and snippet listed below'
+        - license: Apache-2.0
+          scope: 'portable_config/fonts/uosc_icons.otf (Material Icons Round)'
+        - license: MIT
+          scope: 'portable_config/scripts/uosc/lib/fzy.lua'
+        - license: MPL-2.0
+          scope: 'MPL-2.0 snippet inside portable_config/scripts/uosc/lib/utils.lua'
       files:
         - path: LICENSE.LGPL
           license: LGPL-2.1-or-later

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import ntpath
+import posixpath
 import re
+import stat
 import tarfile
 import zipfile
 from pathlib import Path
@@ -88,12 +91,13 @@ FORBIDDEN_PARTS = {
     "update-check-state.json",
 }
 FORBIDDEN_SUFFIXES = {".vpy", ".onnx", ".glsl"}
+FORBIDDEN_PARTS_FOLDED = frozenset(part.casefold() for part in FORBIDDEN_PARTS)
 
 
 def check_forbidden(path: str) -> None:
     parts = Path(path).parts
     for part in parts:
-        if part in FORBIDDEN_PARTS:
+        if part.casefold() in FORBIDDEN_PARTS_FOLDED:
             fail(f"forbidden path in package: {path}")
     suffix = Path(path).suffix.lower()
     if suffix in FORBIDDEN_SUFFIXES:
@@ -157,6 +161,24 @@ def check_licenses(stage: Path, platform: str) -> None:
             fail(f"license text has no source URL in licenses/INDEX.json: {relative}")
 
 
+SUBPROCESS_CALL = re.compile(r"""name\s*=\s*["']subprocess["']""")
+
+
+def update_check_gate_ok(text: str) -> bool:
+    """The enabled=no gate must precede every subprocess call.
+
+    Match the assignment flexibly so spacing or quote changes cannot hide a
+    network call from the static check.
+    """
+    gate = text.find("truthy_disabled(opts.enabled)")
+    if gate == -1:
+        return False
+    calls = list(SUBPROCESS_CALL.finditer(text))
+    if not calls:
+        return False
+    return gate < calls[0].start()
+
+
 def check_stage(stage: Path, platform: str, version: str | None) -> None:
     required = list(REQUIRED)
     if platform == "windows-x64":
@@ -185,9 +207,7 @@ def check_stage(stage: Path, platform: str, version: str | None) -> None:
                     fail(f"{config_name}: referenced file is missing: {target}")
 
     update_check = (portable / "scripts" / "update-check.lua").read_text(encoding="utf-8")
-    gate = update_check.find("truthy_disabled(opts.enabled)")
-    subprocess_call = update_check.find('name = "subprocess"')
-    if gate == -1 or subprocess_call == -1 or gate > subprocess_call:
+    if not update_check_gate_ok(update_check):
         fail("update-check.lua must gate on enabled=no before any subprocess call")
 
     uosc_main = (portable / "scripts" / "uosc" / "main.lua").read_text(encoding="utf-8")
@@ -209,19 +229,55 @@ def check_stage(stage: Path, platform: str, version: str | None) -> None:
     log(f"verified stage {stage} ({platform})")
 
 
-def list_archive(asset: Path) -> list[str]:
+def check_archive_symlink(member_name: str, linkname: str, expected_top: str) -> None:
+    if (
+        not linkname
+        or posixpath.isabs(linkname)
+        or ntpath.isabs(linkname)
+        or ntpath.splitdrive(linkname)[0]
+    ):
+        fail(f"unsafe symlink target in archive: {member_name} -> {linkname}")
+    target = posixpath.normpath(posixpath.join(posixpath.dirname(member_name), linkname))
+    if target != expected_top and not target.startswith(expected_top + "/"):
+        fail(f"symlink target escapes the package root: {member_name} -> {linkname}")
+
+
+def check_archive_hardlink(member_name: str, linkname: str, expected_top: str) -> None:
+    pure = linkname.rstrip("/")
+    if (
+        not pure
+        or posixpath.isabs(pure)
+        or ntpath.isabs(pure)
+        or ntpath.splitdrive(pure)[0]
+    ):
+        fail(f"unsafe hardlink target in archive: {member_name} -> {linkname}")
+    if pure != expected_top and not pure.startswith(expected_top + "/"):
+        fail(f"hardlink target escapes the package root: {member_name} -> {linkname}")
+
+
+def list_archive(asset: Path, expected_top: str) -> list[str]:
     if asset.suffix == ".zip":
         with zipfile.ZipFile(asset) as archive:
+            for info in archive.infolist():
+                mode = (info.external_attr >> 16) & 0o170000
+                if mode == stat.S_IFLNK:
+                    fail(f"zip archive contains a symlink: {info.filename}")
             return archive.namelist()
     if asset.name.endswith(".tar.gz"):
         with tarfile.open(asset, "r:gz") as archive:
-            return archive.getnames()
+            members = archive.getmembers()
+            for member in members:
+                if member.issym():
+                    check_archive_symlink(member.name, member.linkname, expected_top)
+                elif member.islnk():
+                    check_archive_hardlink(member.name, member.linkname, expected_top)
+            return [member.name for member in members]
     fail(f"unsupported archive: {asset}")
 
 
 def check_archive(asset: Path, version: str, platform: str) -> None:
     expected_top = f"mpv-PlayKit-{version}-{platform}"
-    names = list_archive(asset)
+    names = list_archive(asset, expected_top)
     if not names:
         fail(f"archive is empty: {asset}")
     for name in names:

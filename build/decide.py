@@ -13,24 +13,50 @@ from .upstream import GitHubNotFound, download_asset_bytes, github_json, list_re
 from .version import next_release_version, tag_for_version
 
 
+def _manifest_component_fields(component: dict[str, Any]) -> dict[str, Any]:
+    """Fields written into the package and release manifests.
+
+    Lock entries store license metadata as a nested mapping, while published
+    manifests store the aggregate SPDX string plus optional sibling scope
+    fields.  Normalize both shapes so a metadata-only lock change that affects
+    the shipped manifest (for example release_url or license scope) still
+    triggers a release.
+    """
+    license_info = component.get("license")
+    if isinstance(license_info, dict):
+        license_value = license_info.get("spdx")
+        license_scope = license_info.get("scope")
+        license_parts = license_info.get("parts")
+    else:
+        license_value = license_info
+        license_scope = component.get("license_scope")
+        license_parts = component.get("license_parts")
+    return {
+        "version": component.get("version"),
+        "upstream": component.get("upstream"),
+        "release_tag": component.get("release_tag"),
+        "release_url": component.get("release_url"),
+        "asset_name": component.get("asset_name"),
+        "sha256": component.get("sha256"),
+        "license": license_value,
+        "license_scope": license_scope,
+        "license_parts": license_parts,
+    }
+
+
 def compact_components(lock: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for identifier, component in sorted(lock.get("components", {}).items()):
-        result[identifier] = {
-            "version": component.get("version"),
-            "upstream": component.get("upstream"),
-            "release_tag": component.get("release_tag"),
-            "asset_name": component.get("asset_name"),
-            "sha256": component.get("sha256"),
-        }
+        result[identifier] = _manifest_component_fields(component)
     return result
 
 
 def release_components(manifest: dict[str, Any]) -> dict[str, Any]:
     """Normalize a published manifest to the same shape as compact_components.
 
-    Release manifests carry extra fields (release_url, license); comparing the
-    raw dictionaries would report an upstream change on every run.
+    Only fields that are actually written into the package manifest are
+    compared.  Extra release metadata (published_at, size, asset_id, ...) is
+    ignored so a routine resolver run does not report an upstream change.
     """
     components = manifest.get("components")
     if not isinstance(components, dict):
@@ -39,13 +65,7 @@ def release_components(manifest: dict[str, Any]) -> dict[str, Any]:
     for identifier, component in sorted(components.items()):
         if not isinstance(component, dict):
             continue
-        result[identifier] = {
-            "version": component.get("version"),
-            "upstream": component.get("upstream"),
-            "release_tag": component.get("release_tag"),
-            "asset_name": component.get("asset_name"),
-            "sha256": component.get("sha256"),
-        }
+        result[identifier] = _manifest_component_fields(component)
     return result
 
 
@@ -118,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     elif upstream_changed:
         reasons.append("upstream components changed")
     if inputs_changed:
-        reasons.append("config/scripts/manifests changed")
+        reasons.append("repository inputs changed")
 
     releases = list_releases(repository)
     now = datetime.now(tz=timezone.utc)

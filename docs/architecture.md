@@ -59,10 +59,14 @@ gh release create ── 仅在此前全部成功时执行
 
 - 资产由 `sources.lock.json` 固定版本与哈希；下载后再次校验。
 - 压缩包内时间戳、属主、权限被归一化；tar.gz 的 gzip 头 `mtime=0`。
-- `manifest.json` 记录每个组件的上游版本、资产名和 SHA-256，以及配置/脚本/manifests
-  的 `inputs_hash` 与 `sources.lock.json` 的内容哈希。
-- 同一 lock、同一输入应产生相同内容的压缩包（zlib 版本差异可能影响字节级压缩
-  结果，因此发布以 `SHA256SUMS` 为准）。
+- `manifest.json` 记录每个组件的上游版本、资产名和 SHA-256，以及配置、脚本、
+  构建代码、安装器和随包许可证文档的 `inputs_hash` 与 `sources.lock.json`
+  的内容哈希。
+- 压缩包内时间戳、属主、权限被归一化，因此归档条目本身不随构建时间变化。
+- `playkit-version.json` / `manifest.json` 中的 `built_at` 默认取当前 UTC 时间，
+  会随每次构建变化；需要可复现的字节级产物时，设置 `SOURCE_DATE_EPOCH` 或向
+  `build.assemble` / `build.release` 传入 `--built-at`。日常发布以 `SHA256SUMS`
+  和 `inputs_hash` 校验来源与完整性，不依赖“不同时间构建字节相同”。
 
 ## 输入哈希
 
@@ -74,11 +78,20 @@ scripts/local/
 updater/
 manifests/
 installer/
+build/
+.github/workflows/build.yml
 VERSION
+LICENSE
+NOTICE
+THIRD_PARTY.md
+LICENSE_PROVENANCE.md
 ```
 
-任何配置、原创脚本、安装器、上游规则或版本文件的变化都会改变 `inputs_hash`，
-从而触发下一次月度发布，即使上游没有变化。
+`build/` 包含会改变最终发行包内容、结构、uosc 补丁、许可证索引和发布元数据的
+构建源码；`.github/workflows/build.yml` 决定实际执行的组装/打包命令和参数，
+因此也参与哈希。`tests/`、`__pycache__/`、`.pyc/.pyo` 与 Python 工具缓存不参与
+哈希：纯测试或本地缓存变化不会触发正式 Release。任何上述输入的变化
+都会改变 `inputs_hash`，从而触发下一次月度发布，即使上游没有变化。
 
 ## uosc UI 缩放补丁
 

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import ntpath
 import os
+import posixpath
 import stat
 import tarfile
 import zipfile
@@ -16,6 +18,21 @@ FIXED_TIME = (2020, 1, 1, 0, 0, 0)
 def iter_stage(stage: Path):
     for path in sorted(stage.rglob("*"), key=lambda item: str(item.relative_to(stage)).replace("\\", "/")):
         yield path
+
+
+def safe_link_target(relative: str, linkname: str) -> str:
+    """Reject symlink targets that escape the package root."""
+    if (
+        not linkname
+        or posixpath.isabs(linkname)
+        or ntpath.isabs(linkname)
+        or ntpath.splitdrive(linkname)[0]
+    ):
+        fail(f"unsafe symlink target in stage: {relative} -> {linkname}")
+    target = posixpath.normpath(posixpath.join(posixpath.dirname(relative), linkname))
+    if target == ".." or target.startswith("../"):
+        fail(f"symlink target escapes the package: {relative} -> {linkname}")
+    return linkname
 
 
 def zip_stage(stage: Path, output: Path, top: str) -> None:
@@ -60,9 +77,10 @@ def tar_stage(stage: Path, output: Path, top: str) -> None:
                     relative = str(path.relative_to(stage)).replace("\\", "/")
                     archive_name = f"{top}/{relative}"
                     if path.is_symlink():
+                        linkname = safe_link_target(relative, os.readlink(path))
                         info = tarfile.TarInfo(archive_name)
                         info.type = tarfile.SYMTYPE
-                        info.linkname = os.readlink(path)
+                        info.linkname = linkname
                         info.mode = 0o777
                         info.mtime = 0
                         info.uid = info.gid = 0

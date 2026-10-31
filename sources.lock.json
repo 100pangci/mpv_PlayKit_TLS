@@ -53,7 +53,22 @@
             "url": "https://raw.githubusercontent.com/mpv-player/mpv/9e2ed65eb/LICENSE.LGPL"
           }
         ],
-        "spdx": "GPL-3.0-or-later AND GPL-2.0-or-later"
+        "parts": [
+          {
+            "license": "GPL-3.0-or-later",
+            "scope": "pkgforge-dev/mpv-AppImage packaging and runtime"
+          },
+          {
+            "license": "GPL-2.0-or-later",
+            "scope": "mpv binary and GPL-covered components"
+          },
+          {
+            "license": "LGPL-2.1-or-later",
+            "scope": "LGPL-covered parts of mpv"
+          }
+        ],
+        "scope": "component-aggregate",
+        "spdx": "NOASSERTION"
       },
       "platforms": [
         "linux-x64"
@@ -88,6 +103,17 @@
             "url": "https://raw.githubusercontent.com/mpv-player/mpv/e471496c56/LICENSE.LGPL"
           }
         ],
+        "parts": [
+          {
+            "license": "GPL-2.0-or-later",
+            "scope": "mpv Windows build as a whole"
+          },
+          {
+            "license": "LGPL-2.1-or-later",
+            "scope": "LGPL-covered parts of mpv"
+          }
+        ],
+        "scope": "component-aggregate",
         "spdx": "GPL-2.0-or-later"
       },
       "platforms": [
@@ -133,7 +159,26 @@
             "url": "https://raw.githubusercontent.com/po5/thumbfast/master/LICENSE"
           }
         ],
-        "spdx": "LGPL-2.1-or-later AND Apache-2.0 AND MIT AND MPL-2.0"
+        "parts": [
+          {
+            "license": "LGPL-2.1-or-later",
+            "scope": "uosc scripts and UI, except the files and snippet listed below"
+          },
+          {
+            "license": "Apache-2.0",
+            "scope": "portable_config/fonts/uosc_icons.otf (Material Icons Round)"
+          },
+          {
+            "license": "MIT",
+            "scope": "portable_config/scripts/uosc/lib/fzy.lua"
+          },
+          {
+            "license": "MPL-2.0",
+            "scope": "MPL-2.0 snippet inside portable_config/scripts/uosc/lib/utils.lua"
+          }
+        ],
+        "scope": "component-aggregate",
+        "spdx": "NOASSERTION"
       },
       "platforms": "all",
       "published_at": "2026-08-03T15:50:33Z",
@@ -217,8 +262,8 @@
       "version": "2026.10.26"
     }
   },
-  "generated_at": "2026-10-31T13:02:10Z",
-  "inputs_hash": "1566c361a8f809a06447a0708710d669e4232f85ec9dddf7a7ea321a0d06b901",
+  "generated_at": "2026-10-31T15:36:18Z",
+  "inputs_hash": "1f503a58fb8b33a575db09ef94c4b916b5e5041ac21918270462e092229f8a65",
   "repository": "100pangci/mpv_PlayKit_TLS",
   "schema": 1
 }

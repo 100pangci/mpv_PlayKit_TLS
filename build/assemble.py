@@ -19,6 +19,7 @@ from .common import (
     load_manifests,
     log,
     make_executable,
+    manifest_license_fields,
     now_iso,
     package_filename,
     read_json,
@@ -159,22 +160,32 @@ def copy_licenses(stage: Path, work: Path, fetched: dict[str, Any], lock: dict[s
     index: list[dict[str, Any]] = []
     for identifier, entry in sorted(fetched.items()):
         component = lock["components"].get(identifier, {})
+        license_info = component.get("license") or {}
+        parts = license_info.get("parts") or []
         for item in entry.get("license_files", []):
             source = work / item["local_path"]
             target = stage / "licenses" / identifier / item["path"]
             copy_file(source, target)
-            index.append(
-                {
-                    "component": identifier,
-                    "version": component.get("version"),
-                    "upstream": component.get("upstream"),
-                    "license": item.get("license")
-                    or (component.get("license") or {}).get("spdx"),
-                    "file": f"licenses/{identifier}/{item['path']}",
-                    "source_url": item.get("url"),
-                    "sha256": item.get("sha256"),
-                }
+            record = {
+                "component": identifier,
+                "version": component.get("version"),
+                "upstream": component.get("upstream"),
+                "license": item.get("license") or license_info.get("spdx"),
+                "file": f"licenses/{identifier}/{item['path']}",
+                "source_url": item.get("url"),
+                "sha256": item.get("sha256"),
+            }
+            scope = next(
+                (
+                    part.get("scope")
+                    for part in parts
+                    if part.get("license") == item.get("license")
+                ),
+                None,
             )
+            if scope:
+                record["scope"] = scope
+            index.append(record)
     write_json(stage / "licenses" / "INDEX.json", {"schema": 1, "files": index})
     for name in ("THIRD_PARTY.md", "LICENSE_PROVENANCE.md", "LICENSE", "NOTICE"):
         path = ROOT / name
@@ -206,7 +217,7 @@ def write_metadata(
             "release_url": locked.get("release_url"),
             "asset_name": locked.get("asset_name"),
             "sha256": entry.get("sha256"),
-            "license": (locked.get("license") or {}).get("spdx"),
+            **manifest_license_fields(locked.get("license")),
         }
 
     version_info = {
@@ -350,8 +361,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         install_component(stage, component, source_root, work, args.platform)
 
-    # uosc is fetched unmodified, then receives our small automatic UI-scale
-    # patch (see build/patch_uosc.py and THIRD_PARTY.md).
+    # uosc is fetched from upstream; the build applies our small automatic
+    # UI-scale patch to main.lua (see build/patch_uosc.py and THIRD_PARTY.md).
     patch_uosc(stage)
 
     if args.platform == "linux-x64":

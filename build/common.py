@@ -84,9 +84,23 @@ def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], d
             fail(f"{identifier}: missing upstream")
         if not component.get("asset", {}).get("pattern"):
             fail(f"{identifier}: missing asset.pattern")
-        if not component.get("license"):
+        license_info = component.get("license") or {}
+        if not license_info:
             fail(f"{identifier}: missing license metadata")
-        license_files = (component.get("license") or {}).get("files") or []
+        spdx = license_info.get("spdx")
+        if not isinstance(spdx, str) or not spdx.strip():
+            fail(f"{identifier}: license.spdx must be a non-empty SPDX expression or NOASSERTION")
+        scope = license_info.get("scope")
+        if scope is not None and (not isinstance(scope, str) or not scope.strip()):
+            fail(f"{identifier}: license.scope must be a non-empty string")
+        parts = license_info.get("parts")
+        if parts is not None:
+            if not isinstance(parts, list) or not parts:
+                fail(f"{identifier}: license.parts must be a non-empty list")
+            for part in parts:
+                if not isinstance(part, dict) or not part.get("license") or not part.get("scope"):
+                    fail(f"{identifier}: every license.parts entry needs license and scope")
+        license_files = license_info.get("files") or []
         if not license_files:
             fail(f"{identifier}: license metadata has no files")
         for item in license_files:
@@ -95,6 +109,40 @@ def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], d
             if not item.get("license"):
                 fail(f"{identifier}: license file {item.get('path')} needs an SPDX id")
     return project, components
+
+
+def scoped_license_fields(license_info: dict[str, Any] | None) -> dict[str, Any]:
+    """Return optional component-level license scope metadata.
+
+    A component can bundle works under different licenses.  Its `spdx` value is
+    only an aggregate; `scope` and `parts` record which license applies to
+    which object, so consumers do not read them as cumulative terms on a single
+    work.
+    """
+    info = license_info or {}
+    result: dict[str, Any] = {}
+    scope = info.get("scope")
+    if scope:
+        result["scope"] = str(scope)
+    parts = info.get("parts")
+    if parts:
+        result["parts"] = [
+            {"license": str(part["license"]), "scope": str(part["scope"])}
+            for part in parts
+        ]
+    return result
+
+
+def manifest_license_fields(license_info: dict[str, Any] | None) -> dict[str, Any]:
+    """Component license fields for manifest.json and playkit-version.json."""
+    info = license_info or {}
+    fields: dict[str, Any] = {"license": info.get("spdx")}
+    scoped = scoped_license_fields(info)
+    if "scope" in scoped:
+        fields["license_scope"] = scoped["scope"]
+    if "parts" in scoped:
+        fields["license_parts"] = scoped["parts"]
+    return fields
 
 
 def platform_of(component: dict[str, Any], platform: str) -> bool:

@@ -45,11 +45,15 @@
 
 - 基线包含 25 个 uosc Lua 文件，其中 16 个与上游逐字节一致，9 个被修改；这 9 个
   修改版的许可证状态无法逐文件确认。
-- 本仓库不导入这些修改版，而是从 `tomasklaen/uosc` 的当前 Release 下载
-  `uosc.zip`，保持 LGPL-2.1 原样。uosc 自带的 `lib/fzy.lua`（MIT）和
-  `lib/utils.lua` 中的 MPL-2.0 片段保留原文件头，完整许可证文本随包提供。
-- 本项目只通过 `input.conf` 的 `#!` 菜单注释、`script-opts/uosc.conf` 和
-  `thumbfast.lua` 做配置层/协议层定制，不修改 uosc 源码。
+- 本仓库不导入这些修改版，而是从 `tomasklaen/uosc` 的官方 Release 下载
+  `uosc.zip`。除 `portable_config/scripts/uosc/main.lua` 外，其余文件保持上游
+  版本。uosc 自带的 `lib/fzy.lua`（MIT）和 `lib/utils.lua` 中的 MPL-2.0 片段
+  保留原文件头，完整许可证文本随包提供。
+- 构建阶段由 `build/patch_uosc.py` 对 `main.lua` 应用一处 PlayKit 补丁：新增
+  `scale=0` 自动 UI 缩放，并在窗口移动到不同显示器时重新计算。修改文件带有
+  明确的修改说明（含日期）；若上游锚点变化，构建会失败而不是静默跳过。
+- 除该补丁外，本项目只通过 `input.conf` 的 `#!` 菜单注释、
+  `script-opts/uosc.conf` 和 `thumbfast.lua` 做配置层/协议层定制。
 
 ## 其他基线内容
 
@@ -75,5 +79,6 @@
 1. 新脚本放 `scripts/local/`，文件名即 mpv 脚本名。
 2. 不使用基线中许可证不明的代码；如需参考，只参考公开 API 用法并重写。
 3. 构建时脚本被复制到包内 `portable_config/scripts/` 根目录，由 mpv 自动加载。
-4. 不要修改 `scripts/uosc/`；uosc 由构建系统从上游获取。
+4. 不要手工添加或修改 `scripts/uosc/`；uosc 由构建系统从上游获取，仅由
+   `build/patch_uosc.py` 在构建阶段应用上述补丁。
 5. 新增脚本后运行 `python -m build.verify`，确认没有落入禁用路径。

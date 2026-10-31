@@ -60,11 +60,15 @@ application/octet-stream`，公开仓库和私有仓库都能工作。仓库公�
 
 ## uosc 与缩略图
 
-- uosc 直接使用上游 `uosc.zip`，不修改任何 Lua。当前锁定版本为 5.13.0，其控件名
-  使用 `play-pause`，缩略图消息固定发给名为 `thumbfast` 的脚本。
-- 构建时只保留当前平台的 `scripts/uosc/bin/ziggy-*`，删除其他平台 helper；
-  Lua 代码保持上游原样，便于后续直接升级。
-- uosc 的菜单来自 `input.conf` 末尾带 `#!` 的注释，不改 uosc 源码。
+- uosc 从上游 `uosc.zip` 获取。当前锁定版本为 5.13.0，其控件名使用
+  `play-pause`，缩略图消息固定发给名为 `thumbfast` 的脚本。
+- 构建阶段 `build/patch_uosc.py` 只修改
+  `portable_config/scripts/uosc/main.lua`，加入 `scale=0` 自动 UI 缩放并观察
+  显示器尺寸变化；补丁带有明确修改说明，上游锚点变化时构建失败。其余 uosc
+  文件保持上游版本。
+- 构建时只保留当前平台的 `scripts/uosc/bin/ziggy-*`，删除其他平台 helper。
+- uosc 菜单通过 `input.conf` 末尾带 `#!` 的注释配置；这项菜单定制本身不需要
+  修改 uosc 源码。
 - 缩略图由本仓库原创的 `scripts/local/thumbfast.lua` 实现：它按 uosc 的公开消息
   协议响应 `thumbfast-info`、`thumb`、`clear`，用随包 mpv 子进程解码单帧，不依赖
   `thumb_engine/` 或第三方 thumbfast。

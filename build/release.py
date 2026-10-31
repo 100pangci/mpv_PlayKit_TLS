@@ -13,6 +13,7 @@ from .common import (
     fail,
     human_size,
     log,
+    manifest_license_fields,
     now_iso,
     package_filename,
     read_json,
@@ -119,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
             "release_url": locked.get("release_url"),
             "asset_name": locked.get("asset_name"),
             "sha256": locked.get("sha256"),
-            "license": (locked.get("license") or {}).get("spdx"),
+            **manifest_license_fields(locked.get("license")),
         }
         for platform, manifest in embedded.items():
             packaged = (manifest.get("components") or {}).get(identifier)

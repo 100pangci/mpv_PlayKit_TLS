@@ -5,7 +5,7 @@
 -- script-opts/update-check.conf to disable it completely: in that case this
 -- script performs no file writes, spawns no subprocess and makes no network
 -- request.  Disabling from the in-player menu writes a persistent state file,
--- which also prevents any future network check.
+-- which suppresses automatic checks until it is reset from the menu.
 
 local mp = require "mp"
 local options = require "mp.options"
@@ -74,15 +74,35 @@ local function write_state()
 		mp.msg.warn("update-check: could not write state file")
 		return
 	end
-	file:write(encoded, "\n")
-	file:close()
-	os.remove(state_path)
+	local written, write_err = file:write(encoded, "\n")
+	local closed, close_err = file:close()
+	if not written or not closed then
+		os.remove(temp_path)
+		mp.msg.warn(
+			"update-check: could not write state file: "
+			.. tostring(write_err or close_err)
+		)
+		return
+	end
+	-- Prefer an atomic replace.  On Windows os.rename cannot overwrite an
+	-- existing file, so fall back to removing the old state only after the
+	-- temporary file is known to be complete.
 	local ok, err = os.rename(temp_path, state_path)
+	if not ok then
+		os.remove(state_path)
+		ok, err = os.rename(temp_path, state_path)
+	end
 	if not ok then
 		os.remove(temp_path)
 		mp.msg.warn("update-check: could not replace state file: " .. tostring(err))
 	end
 end
+
+-- The persistent "disabled" state and a missing/non-release version only
+-- suppress the automatic check.  Keep the script loaded so the menu can still
+-- offer "reset"; run_check() itself refuses to touch the network while
+-- disabled.
+local auto_check_allowed = true
 
 do
 	local saved = read_json_file(state_path)
@@ -94,8 +114,8 @@ do
 		end
 	end
 	if state.disabled == true then
-		mp.msg.info("update-check is disabled by saved state; no network request will be made")
-		return
+		auto_check_allowed = false
+		mp.msg.info("update-check is disabled by saved state; automatic checks will not run")
 	end
 end
 
@@ -108,8 +128,8 @@ do
 end
 
 if not local_version then
-	mp.msg.warn("update-check: playkit-version.json is missing; skipping update check")
-	return
+	auto_check_allowed = false
+	mp.msg.warn("update-check: playkit-version.json is missing; skipping automatic update check")
 end
 
 local function parse_version(value)
@@ -124,9 +144,9 @@ local function parse_version(value)
 	return parts
 end
 
-if not parse_version(local_version) then
-	mp.msg.info("update-check: local version is not a release version; skipping")
-	return
+if local_version and not parse_version(local_version) then
+	auto_check_allowed = false
+	mp.msg.info("update-check: local version is not a release version; skipping automatic update check")
 end
 
 local function is_newer(candidate, current)
@@ -210,6 +230,7 @@ local checking = false
 
 local function run_check(force)
 	if state.disabled or checking then return end
+	if not local_version or not parse_version(local_version) then return end
 
 	local now = os.time()
 	local interval = math.max(0, tonumber(opts.check_interval_hours) or 24) * 3600
@@ -226,6 +247,10 @@ local function run_check(force)
 	local commands = make_http_commands(api_url)
 
 	local function try(index)
+		if state.disabled then
+			checking = false
+			return
+		end
 		if index > #commands then
 			checking = false
 			state.last_check = now
@@ -242,6 +267,12 @@ local function run_check(force)
 			capture_stderr = true,
 			playback_only = false,
 		}, function(success, result)
+			-- The user may have disabled the checker while curl/wget was in
+			-- flight; do not launch the next HTTP client in that case.
+			if state.disabled then
+				checking = false
+				return
+			end
 			if success and result and result.status == 0 and type(result.stdout) == "string"
 				and #result.stdout > 0 and #result.stdout <= 256 * 1024 then
 				local ok, release = pcall(utils.parse_json, result.stdout)
@@ -298,7 +329,11 @@ mp.add_key_binding(nil, "reset", function()
 end)
 
 -- Delay the first check slightly so player startup is not competing with a
--- subprocess.  run_check() returns immediately after spawning curl/wget.
-mp.add_timeout(4, function()
-	run_check(false)
-end)
+-- subprocess.  run_check() returns immediately after spawning curl/wget.  When
+-- the saved state is disabled or the local version is unusable, do not even
+-- schedule it; the menu's "reset" action can still enable checks explicitly.
+if auto_check_allowed then
+	mp.add_timeout(4, function()
+		run_check(false)
+	end)
+end

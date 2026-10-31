@@ -14,7 +14,16 @@ components:
       version: '{date}-git-{commit}'
       commit: '{commit}'
     license:
+      # The Windows build as a whole is GPL-2.0-or-later; LGPL-covered parts
+      # keep their own terms.  Record both scopes instead of implying the
+      # LGPL text covers the whole build.
       spdx: GPL-2.0-or-later
+      scope: component-aggregate
+      parts:
+        - license: GPL-2.0-or-later
+          scope: 'mpv Windows build as a whole'
+        - license: LGPL-2.1-or-later
+          scope: 'LGPL-covered parts of mpv'
       files:
         - path: LICENSE.GPL
           license: GPL-2.0-or-later
@@ -50,7 +59,17 @@ components:
       version: '{version}'
       commit: '{commit}'
     license:
-      spdx: GPL-3.0-or-later AND GPL-2.0-or-later
+      # The AppImage packaging/runtime and the bundled mpv build carry
+      # different licenses; this is not a joint license on a single work.
+      spdx: NOASSERTION
+      scope: component-aggregate
+      parts:
+        - license: GPL-3.0-or-later
+          scope: 'pkgforge-dev/mpv-AppImage packaging and runtime'
+        - license: GPL-2.0-or-later
+          scope: 'mpv binary and GPL-covered components'
+        - license: LGPL-2.1-or-later
+          scope: 'LGPL-covered parts of mpv'
       files:
         - path: LICENSE
           license: GPL-3.0-or-later
@@ -68,8 +87,8 @@ components:
       # mapping, namespaces).  Only remove hooks that would self-update the
       # AppImage or download another yt-dlp at runtime.
       remove_hooks:
-        - '*self-updater*.hook'
-        - '*get-yt-dlp*.hook'
+        - '*self-update*.hook'
+        - '*yt-dlp*.hook'
     install:
       - source: .
         target: mpv

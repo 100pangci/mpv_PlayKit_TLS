@@ -44,14 +44,12 @@ jobs:
           path: dist/out
           key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-windows-x64
           enableCrossOsArchive: true
-          compressionMethod: gzip
           fail-on-cache-miss: true
       - name: Restore Linux package
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: dist/out
           key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-linux-x64
-          compressionMethod: gzip
           fail-on-cache-miss: true
       - name: Build release metadata
         run: |
@@ -73,6 +71,12 @@ jobs:
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::error::release $TAG already exists; refusing to overwrite"
+            exit 1
+          fi
+          # A tag can exist without a Release (for example a manually created
+          # tag).  gh release create would attach to it, so reject it too.
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::tag $TAG already exists; refusing to reuse it"
             exit 1
           fi
           gh release create "$TAG" \

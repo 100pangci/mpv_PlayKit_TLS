@@ -13,7 +13,8 @@ uosc 界面与菜单、完整快捷键、时间轴缩略图、属性保存、统
 
 - mpv（Windows: shinchiro 构建；Linux: pkgforge-dev AppImage）
 - yt-dlp
-- uosc 与 LXGW WenKai Mono Lite 字体
+- uosc（构建时仅对 `main.lua` 应用自动 UI 缩放补丁，其余文件保持上游）与
+  LXGW WenKai Mono Lite 字体
 - 播放器配置、profiles、按键菜单与原创本地脚本
 - 播放器内更新检测器
 - GitHub Actions 每月自动检查、构建与发布

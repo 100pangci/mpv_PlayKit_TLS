@@ -9,12 +9,15 @@ from .common import fail, find_7z, find_unsquashfs, log, make_executable, remove
 
 # Hooks that would update the AppImage or download another yt-dlp at runtime.
 # Other upstream hooks (CA certificates, path mapping, namespaces, ...) are
-# part of the AppDir runtime and must be kept.
-DEFAULT_REMOVED_HOOKS = ("*self-updater*.hook", "*get-yt-dlp*.hook")
+# part of the AppDir runtime and must be kept.  Match case-insensitively and
+# cover naming variants such as download-yt-dlp; the package ships its own
+# yt-dlp, so no AppImage yt-dlp hook should survive.
+DEFAULT_REMOVED_HOOKS = ("*self-update*.hook", "*yt-dlp*.hook")
 
 
 def hook_is_removed(name: str, patterns: tuple[str, ...] | list[str]) -> bool:
-    return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
+    lowered = name.casefold()
+    return any(fnmatch.fnmatchcase(lowered, pattern.casefold()) for pattern in patterns)
 
 
 def extract_7z(archive: Path, destination: Path, members: list[str] | None = None) -> None:
