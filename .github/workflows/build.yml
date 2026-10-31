@@ -30,6 +30,8 @@ env:
 
 jobs:
   tests:
+    # This repository is public: never execute build scripts from fork PRs
+    # automatically.  Same-repository PRs still get the full test suite.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     steps:
