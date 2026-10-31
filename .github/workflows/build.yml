@@ -102,6 +102,7 @@ jobs:
         with:
           path: dist/out
           key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-windows-x64
+          enableCrossOsArchive: true
 
   linux-x64:
     needs: tests
