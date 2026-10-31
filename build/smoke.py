@@ -101,6 +101,23 @@ def main(argv: list[str] | None = None) -> int:
                 timeout=args.timeout,
                 env=env,
             )
+            # thumbfast decodes frames with the AppImage's inner mpv binary,
+            # not through the launcher.  Verify that entry point works on its
+            # own so timeline thumbnails cannot fail silently.
+            inner_mpv = stage / "mpv" / "bin" / "mpv"
+            if not inner_mpv.is_file():
+                fail(f"thumbfast helper binary is missing: {inner_mpv}")
+            inner_version = run_test(
+                [inner_mpv, "--no-config", "--version"],
+                cwd=stage,
+                timeout=args.timeout,
+                env=env,
+            )
+            log(
+                inner_version.splitlines()[0]
+                if inner_version.splitlines()
+                else "inner mpv --version"
+            )
         else:
             fail(f"unknown platform: {args.platform}")
 
