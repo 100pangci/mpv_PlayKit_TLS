@@ -12,6 +12,7 @@ from build.common import ROOT, load_manifests, package_filename, sha256_file
 from build.decide import compact_components, release_components
 from build.extract import DEFAULT_REMOVED_HOOKS, find_squashfs_offset, hook_is_removed
 from build.inputs import compute_inputs_hash
+from build.release import checksum_lines
 from build.upstream import StrictFormat, lock_hash, render
 from build.version import compare_versions, next_release_version, parse_release_version
 
@@ -129,6 +130,21 @@ class InputsTests(unittest.TestCase):
             (root / "config" / "mpv.conf").write_text("a=2\n", encoding="utf-8")
             second = compute_inputs_hash(root)
             self.assertNotEqual(first, second)
+
+
+class ReleaseChecksumTests(unittest.TestCase):
+    def test_checksums_only_list_published_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "manifest.json").write_text("{}\n", encoding="utf-8")
+            (root / "mpv-PlayKit-2026.11-windows-x64.zip").write_bytes(b"zip")
+            (root / "release-notes.md").write_text("notes\n", encoding="utf-8")
+            (root / "SHA256SUMS").write_text("stale\n", encoding="utf-8")
+            names = [line.split("  ", 1)[1] for line in checksum_lines(root)]
+            self.assertEqual(
+                names,
+                ["manifest.json", "mpv-PlayKit-2026.11-windows-x64.zip"],
+            )
 
 
 class ZipSafetyTests(unittest.TestCase):

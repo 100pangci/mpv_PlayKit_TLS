@@ -21,6 +21,19 @@ from .common import (
 )
 from .upstream import lock_hash
 
+# Files that are generated next to the published assets but are not themselves
+# release assets.  SHA256SUMS must only list files users can download.
+CHECKSUM_EXCLUDED = frozenset({"SHA256SUMS", "release-notes.md"})
+
+
+def checksum_lines(out_dir: Path) -> list[str]:
+    lines = []
+    for path in sorted(out_dir.iterdir()):
+        if path.name in CHECKSUM_EXCLUDED or not path.is_file():
+            continue
+        lines.append(f"{sha256_file(path)}  {path.name}")
+    return lines
+
 
 def find_assets(dist: Path, version: str) -> dict[str, Path]:
     result: dict[str, Path] = {}
@@ -155,11 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     (out_dir / "release-notes.md").write_text("\n".join(notes_lines), encoding="utf-8", newline="\n")
 
-    checksums = []
-    for path in sorted(out_dir.iterdir()):
-        if path.name == "SHA256SUMS" or not path.is_file():
-            continue
-        checksums.append(f"{sha256_file(path)}  {path.name}")
+    checksums = checksum_lines(out_dir)
     (out_dir / "SHA256SUMS").write_text("\n".join(checksums) + "\n", encoding="utf-8", newline="\n")
     log(f"wrote release metadata to {out_dir}")
     return 0
