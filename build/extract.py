@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import fnmatch
-import os
 import shutil
 import subprocess
 from pathlib import Path
 
-from .common import BuildError, fail, find_7z, find_unsquashfs, log, make_executable, remove_tree, safe_extract_zip
+from .common import fail, find_7z, find_unsquashfs, log, make_executable, remove_tree, safe_extract_zip
 
 # Hooks that would update the AppImage or download another yt-dlp at runtime.
 # Other upstream hooks (CA certificates, path mapping, namespaces, ...) are
@@ -96,14 +95,21 @@ def extract_appimage(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=600,
-            env={**os.environ, "APPIMAGE_EXTRACT_AND_RUN": "1"},
         )
-        root = temporary / "squashfs-root"
+        root = temporary / "AppDir"
+        if not root.is_dir():
+            # Older AppImage runtimes extract to squashfs-root.  uruntime
+            # creates AppDir and a squashfs-root symlink to it, so prefer the
+            # real directory and resolve symlinks before moving it.
+            root = temporary / "squashfs-root"
+        if root.is_symlink():
+            root = root.resolve()
         if process.returncode != 0 or not root.is_dir():
             fail(
                 f"AppImage extraction failed for {archive}\n"
                 f"{process.stdout[-4000:]}\n{process.stderr[-4000:]}"
             )
+        log(f"extracted AppDir at {root}")
         shutil.move(str(root), str(destination))
         remove_tree(temporary)
 
