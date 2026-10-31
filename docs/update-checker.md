@@ -84,15 +84,18 @@ timeout_seconds=12
 | 恢复更新检查 | uosc 菜单“更新 > 恢复更新检查” |
 
 打开链接时 Windows 使用 `explorer.exe`，Linux 使用 `xdg-open`。只接受
-`https://github.com/` 开头的 URL。
+`https://github.com/` 开头的 URL。尚未成功检测到新版本时，“打开 Release 页面”
+会回退到 `https://github.com/<repository>/releases/latest`。
 
 ## 私有仓库限制
 
 GitHub 的 Release API 对匿名请求只返回公开仓库的数据。本仓库当前为私有仓库，
 因此播放器内的匿名检测会得到 404，脚本只在日志中记录
 `update-check: no working HTTP client (curl or wget) or request failed`，不会
-弹出错误提示，也不影响播放；每 24 小时会按间隔重试。仓库改为公开后无需修改
-配置即可正常检测。脚本不会内置任何访问令牌，避免把凭据分发到每个安装包。
+弹出错误提示，也不影响播放；每 24 小时会按间隔重试。菜单中的“打开 Release
+页面”仍会打开 `releases/latest`，由浏览器使用用户自己的登录状态访问。仓库改为
+公开后无需修改配置即可自动检测。脚本不会内置任何访问令牌，避免把凭据分发到
+每个安装包。
 
 ## 手动验证
 

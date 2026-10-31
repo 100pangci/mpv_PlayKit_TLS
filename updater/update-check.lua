@@ -36,6 +36,10 @@ end
 
 local state_path = mp.command_native({ "expand-path", "~~/update-check-state.json" })
 local version_path = mp.command_native({ "expand-path", "~~/playkit-version.json" })
+-- The API check cannot see releases of a private repository without a token,
+-- but the user's browser session can.  Keep a release-page fallback so the
+-- menu item always opens something useful.
+local releases_url = string.format("https://github.com/%s/releases/latest", opts.repository)
 
 local state = {
 	schema = 1,
@@ -268,7 +272,7 @@ mp.add_key_binding(nil, "open-release", function()
 	if valid_release_url(state.latest_url) then
 		open_url(state.latest_url)
 	else
-		mp.osd_message("还没有检测到可用的 PlayKit 版本信息", 3000)
+		open_url(releases_url)
 	end
 end)
 
