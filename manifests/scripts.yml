@@ -1,0 +1,38 @@
+schema: 1
+# Upstream scripts and their assets.  uosc is used byte-for-byte as published;
+# do not patch or vendor it.  Local scripts live in scripts/local/ instead.
+components:
+  - id: uosc
+    kind: archive
+    platforms: all
+    upstream: tomasklaen/uosc
+    release:
+      mode: latest
+    asset:
+      pattern: '^uosc\.zip$'
+      version: '{release_tag}'
+    license:
+      spdx: LGPL-2.1-or-later AND Apache-2.0
+      files:
+        - path: LICENSE.LGPL
+          url: 'https://raw.githubusercontent.com/tomasklaen/uosc/{release_tag}/LICENSE.LGPL'
+        # uosc_icons.otf is Material Icons Round (Copyright Google LLC).
+        - path: Material-Icons-Apache-2.0.txt
+          url: 'https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE'
+    extract:
+      type: zip
+    install:
+      - source: scripts/uosc
+        target: portable_config/scripts/uosc
+        tree: true
+      - source: fonts
+        target: portable_config/fonts
+        tree: true
+    platform_binaries:
+      # uosc 5.x ships optional Go helpers for clipboard and subtitle search.
+      # Keep only the binary for the platform being packaged.  The Lua code is
+      # not modified, so upstream updates remain drop-in replacements.
+      windows-x64:
+        - scripts/uosc/bin/ziggy-windows.exe
+      linux-x64:
+        - scripts/uosc/bin/ziggy-linux

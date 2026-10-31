@@ -1,0 +1,94 @@
+name: Monthly update
+
+on:
+  schedule:
+    # 05:17 UTC on the first day of every month.
+    - cron: "17 5 1 * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build and release even when nothing changed
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: monthly-update
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+  PYTHONIOENCODING: "utf-8"
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      release_needed: ${{ steps.decide.outputs.release_needed }}
+      version: ${{ steps.decide.outputs.version }}
+      tag: ${{ steps.decide.outputs.tag }}
+      lock_changed: ${{ steps.decide.outputs.lock_changed }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Resolve latest upstream releases
+        run: |
+          mkdir -p .work
+          python -m build.resolve --output .work/sources.lock.json --repository "${{ github.repository }}"
+      - name: Decide whether a release is needed
+        id: decide
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          extra=""
+          if [ "${FORCE:-false}" = "true" ]; then extra="--force"; fi
+          python -m build.decide \
+            --new-lock .work/sources.lock.json \
+            --old-lock sources.lock.json \
+            --repository "${{ github.repository }}" \
+            --github-output "$GITHUB_OUTPUT" \
+            $extra
+      - name: Upload fresh lock
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sources-lock
+          path: .work/sources.lock.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Report decision
+        run: |
+          echo "::notice::release_needed=${{ steps.decide.outputs.release_needed }} version=${{ steps.decide.outputs.version }} reason=${{ steps.decide.outputs.reason }}"
+
+  build:
+    needs: resolve
+    if: needs.resolve.outputs.release_needed == 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+      lock_artifact: sources-lock
+      source_sha: ${{ github.sha }}
+
+  release:
+    needs: [resolve, build]
+    if: needs.resolve.outputs.release_needed == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+      tag: ${{ needs.resolve.outputs.tag }}
+      lock_changed: ${{ needs.resolve.outputs.lock_changed }}
+      source_sha: ${{ github.sha }}

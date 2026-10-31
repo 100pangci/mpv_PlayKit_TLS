@@ -1,0 +1,12 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ttf binary
+*.otf binary
+*.zip binary
+*.7z binary
+*.tar.gz binary
+*.AppImage binary
+*.exe binary
+*.dll binary

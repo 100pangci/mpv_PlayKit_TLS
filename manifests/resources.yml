@@ -1,0 +1,20 @@
+schema: 1
+# Non-executable third-party resources.  These are fetched at build time too.
+components:
+  - id: lxgw-wenkai-mono-lite
+    kind: file
+    platforms: all
+    upstream: lxgw/LxgwWenKai-Lite
+    release:
+      mode: latest
+    asset:
+      pattern: '^LXGWWenKaiMonoLite-Regular\.ttf$'
+      version: '{release_tag}'
+    license:
+      spdx: OFL-1.1
+      files:
+        - path: OFL.txt
+          url: 'https://raw.githubusercontent.com/lxgw/LxgwWenKai-Lite/{release_tag}/OFL.txt'
+    install:
+      - source: LXGWWenKaiMonoLite-Regular.ttf
+        target: portable_config/fonts/LXGWWenKaiMonoLite-Regular.ttf

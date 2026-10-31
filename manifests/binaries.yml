@@ -1,0 +1,107 @@
+schema: 1
+# Third-party binaries.  Nothing in this file is committed to the repository;
+# the resolver records exact releases and hashes in sources.lock.json and the
+# build fetches them on demand.
+components:
+  - id: mpv-windows
+    kind: binary
+    platforms: [windows-x64]
+    upstream: shinchiro/mpv-winbuild-cmake
+    release:
+      mode: latest
+    asset:
+      pattern: '^mpv-x86_64-(?P<date>\d{8})-git-(?P<commit>[0-9a-f]+)\.7z$'
+      version: '{date}-git-{commit}'
+      commit: '{commit}'
+    license:
+      spdx: GPL-2.0-or-later
+      files:
+        - path: LICENSE.GPL
+          url: 'https://raw.githubusercontent.com/mpv-player/mpv/{commit}/LICENSE.GPL'
+        - path: LICENSE.LGPL
+          url: 'https://raw.githubusercontent.com/mpv-player/mpv/{commit}/LICENSE.LGPL'
+    extract:
+      type: 7z
+      members:
+        - mpv.exe
+        - mpv.com
+        - d3dcompiler_43.dll
+    install:
+      - source: mpv.exe
+        target: mpv.exe
+      - source: mpv.com
+        target: mpv.com
+      - source: d3dcompiler_43.dll
+        target: d3dcompiler_43.dll
+
+  - id: mpv-linux
+    kind: binary
+    platforms: [linux-x64]
+    upstream: pkgforge-dev/mpv-AppImage
+    release:
+      mode: tag
+      tag: nightly
+    asset:
+      # nightly assets embed the mpv master commit in the filename.  The stable
+      # release uses the same pattern without the -<build>-g<commit> suffix.
+      pattern: '^mpv-(?P<version>v[0-9][^-]*(?:-\d+-g(?P<commit>[0-9a-f]+))?)-anylinux-x86_64\.AppImage$'
+      version: '{version}'
+      commit: '{commit}'
+    license:
+      spdx: GPL-3.0-or-later AND GPL-2.0-or-later
+      files:
+        - path: LICENSE
+          url: 'https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/main/LICENSE'
+    extract:
+      type: appimage
+      # Keep the upstream runtime compatibility hooks (CA certificates, path
+      # mapping, namespaces).  Only remove hooks that would self-update the
+      # AppImage or download another yt-dlp at runtime.
+      remove_hooks:
+        - '*self-updater*.hook'
+        - '*get-yt-dlp*.hook'
+    install:
+      - source: .
+        target: mpv
+        tree: true
+
+  - id: yt-dlp-windows
+    kind: binary
+    platforms: [windows-x64]
+    upstream: yt-dlp/yt-dlp
+    release:
+      mode: latest
+    asset:
+      pattern: '^yt-dlp\.exe$'
+      version: '{release_tag}'
+    license:
+      spdx: Unlicense
+      files:
+        - path: LICENSE
+          url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/LICENSE'
+        - path: THIRD_PARTY_LICENSES.txt
+          url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/THIRD_PARTY_LICENSES.txt'
+    install:
+      - source: yt-dlp.exe
+        target: yt-dlp.exe
+
+  - id: yt-dlp-linux
+    kind: binary
+    platforms: [linux-x64]
+    upstream: yt-dlp/yt-dlp
+    release:
+      mode: latest
+    asset:
+      pattern: '^yt-dlp_linux$'
+      version: '{release_tag}'
+    license:
+      spdx: Unlicense
+      files:
+        - path: LICENSE
+          url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/LICENSE'
+        - path: THIRD_PARTY_LICENSES.txt
+          url: 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/{release_tag}/THIRD_PARTY_LICENSES.txt'
+    install:
+      - source: yt-dlp_linux
+        target: yt-dlp
+        executable: true
