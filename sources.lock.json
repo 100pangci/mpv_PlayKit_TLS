@@ -10,6 +10,7 @@
       "license": {
         "files": [
           {
+            "license": "OFL-1.1",
             "path": "OFL.txt",
             "url": "https://raw.githubusercontent.com/lxgw/LxgwWenKai-Lite/v1.530/OFL.txt"
           }
@@ -37,6 +38,7 @@
       "license": {
         "files": [
           {
+            "license": "GPL-3.0-or-later",
             "path": "LICENSE",
             "url": "https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/main/LICENSE"
           }
@@ -66,10 +68,12 @@
       "license": {
         "files": [
           {
+            "license": "GPL-2.0-or-later",
             "path": "LICENSE.GPL",
             "url": "https://raw.githubusercontent.com/mpv-player/mpv/e471496c56/LICENSE.GPL"
           },
           {
+            "license": "LGPL-2.1-or-later",
             "path": "LICENSE.LGPL",
             "url": "https://raw.githubusercontent.com/mpv-player/mpv/e471496c56/LICENSE.LGPL"
           }
@@ -99,10 +103,12 @@
       "license": {
         "files": [
           {
+            "license": "LGPL-2.1-or-later",
             "path": "LICENSE.LGPL",
             "url": "https://raw.githubusercontent.com/tomasklaen/uosc/5.13.0/LICENSE.LGPL"
           },
           {
+            "license": "Apache-2.0",
             "path": "Material-Icons-Apache-2.0.txt",
             "url": "https://raw.githubusercontent.com/google/material-design-icons/master/LICENSE"
           }
@@ -130,10 +136,12 @@
       "license": {
         "files": [
           {
+            "license": "Unlicense",
             "path": "LICENSE",
             "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/LICENSE"
           },
           {
+            "license": "NOASSERTION",
             "path": "THIRD_PARTY_LICENSES.txt",
             "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt"
           }
@@ -163,10 +171,12 @@
       "license": {
         "files": [
           {
+            "license": "Unlicense",
             "path": "LICENSE",
             "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/LICENSE"
           },
           {
+            "license": "NOASSERTION",
             "path": "THIRD_PARTY_LICENSES.txt",
             "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt"
           }
@@ -187,8 +197,8 @@
       "version": "2026.10.26"
     }
   },
-  "generated_at": "2026-10-31T11:26:43Z",
-  "inputs_hash": "55f052a8d1907f50ddf7c32f325033c912018f17dcdb8aa7a19ac4c95e6968d7",
+  "generated_at": "2026-10-31T11:33:32Z",
+  "inputs_hash": "3c77618ab222181c8d11530a500da6fbf03f3a771be5812496077dee14b7e52a",
   "repository": "100pangci/mpv_PlayKit_TLS",
   "schema": 1
 }
