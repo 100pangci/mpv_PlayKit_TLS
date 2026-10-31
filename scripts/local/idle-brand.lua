@@ -54,7 +54,24 @@ local function event(prefix, path)
 end
 
 local function menu_is_open()
-	return menu_type ~= nil and menu_type ~= "" and menu_type ~= "undefined"
+	-- uosc sets 'undefined' while a menu without an explicit type is open,
+	-- so any non-empty value means the menu is visible.
+	return menu_type ~= nil and menu_type ~= ""
+end
+
+-- Follow the display the window is currently on instead of the OS DPI
+-- factor: the shorter side of a 1080p display maps to 100%, matching the
+-- uosc auto-scale mode enabled with `scale=0` in uosc.conf.  The badge then
+-- stays the same physical size as the rest of the UI, including after the
+-- window is dragged to a display with different resolution or scaling.
+local function auto_scale()
+	local width = mp.get_property_number("display-width", 0) or 0
+	local height = mp.get_property_number("display-height", 0) or 0
+	local shorter = math.min(width, height)
+	if shorter <= 0 then
+		return 1
+	end
+	return tonumber(string.format("%.2f", shorter / 1080)) or 1
 end
 
 local function update()
@@ -70,9 +87,7 @@ local function update()
 		return
 	end
 
-	local hidpi = mp.get_property_number("display-hidpi-scale", 1) or 1
-	local fullscreen = mp.get_property_native("fullscreen") == true
-	local scale = hidpi * (fullscreen and 1.3 or 1)
+	local scale = auto_scale()
 
 	local logo_size = 112.5 * scale
 	local font_size = 40 * scale
@@ -127,9 +142,13 @@ end
 
 mp.observe_property("idle-active", "bool", update)
 mp.observe_property("osd-dimensions", "native", update)
-mp.observe_property("display-hidpi-scale", "number", update)
-mp.observe_property("fullscreen", "bool", update)
-mp.observe_property("user-data/uosc/menu/type", "string", function(_, value)
+-- Recompute the automatic scale when the window moves to another display.
+mp.observe_property("display-width", "number", update)
+mp.observe_property("display-height", "number", update)
+-- "native" is required here: with a string format, deleting the property
+-- (which is what uosc does when it closes a menu) yields the literal string
+-- "null", and the badge would stay hidden.
+mp.observe_property("user-data/uosc/menu/type", "native", function(_, value)
 	menu_type = value
 	update()
 end)

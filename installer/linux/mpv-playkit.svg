@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- mpv PlayKit icon.  Original drawing, GPL-3.0-or-later. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="86%" stop-color="#f593c8" stop-opacity="0"/>
+      <stop offset="94%" stop-color="#f593c8" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#f593c8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="128" cy="128" r="126" fill="url(#glow)"/>
+  <circle cx="128" cy="128" r="117.5" fill="#e5e5e5"/>
+  <circle cx="128" cy="128" r="110" fill="#682167"/>
+  <circle cx="128" cy="128" r="87.5" fill="#430142"/>
+  <circle cx="128" cy="128" r="56.25" fill="#dddbdd"/>
+  <path d="M108.25 158.25 L108.25 100.75 L159.25 129.5 Z" fill="#691f69"/>
+</svg>

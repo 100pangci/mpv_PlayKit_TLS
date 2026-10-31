@@ -1,6 +1,8 @@
 schema: 1
-# Upstream scripts and their assets.  uosc is used byte-for-byte as published;
-# do not patch or vendor it.  Local scripts live in scripts/local/ instead.
+# Upstream scripts and their assets.  uosc is fetched unmodified from its
+# official release and then receives one small, documented build-time patch
+# (build/patch_uosc.py) that adds the automatic UI scale; see THIRD_PARTY.md.
+# Local scripts live in scripts/local/ instead.
 components:
   - id: uosc
     kind: archive
@@ -43,8 +45,8 @@ components:
         tree: true
     platform_binaries:
       # uosc 5.x ships optional Go helpers for clipboard and subtitle search.
-      # Keep only the binary for the platform being packaged.  The Lua code is
-      # not modified, so upstream updates remain drop-in replacements.
+      # Keep only the binary for the platform being packaged.  The build-time
+      # UI-scale patch is applied to the Lua source by build/patch_uosc.py.
       windows-x64:
         - scripts/uosc/bin/ziggy-windows.exe
       linux-x64:

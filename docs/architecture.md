@@ -14,6 +14,7 @@
 | `config/linux/` | `platform.conf`（PipeWire/PulseAudio/ALSA）与 `ytdl_hook.conf` |
 | `scripts/local/` | 本项目原创 Lua（`idle-brand`、`save_global_props`、`input_plus`、`thumbfast`）；构建时复制到包内 `portable_config/scripts/` 根目录 |
 | `updater/update-check.lua` | 播放器内更新检测器；构建时同样复制到 scripts 根目录 |
+| `installer/` | Windows 安装/卸载脚本与图标；Linux 安装接口占位（未实现）；构建时原样复制到包内 |
 | `manifests/*.yml` | 上游仓库、Release 选择方式、资产正则、许可证、解包与安装规则 |
 | `sources.lock.json` | 解析后的固定版本、URL、SHA-256；每月由工作流刷新 |
 | `build/` | 构建工具（纯 Python，无第三方运行时依赖，除 PyYAML） |
@@ -72,11 +73,21 @@ config/
 scripts/local/
 updater/
 manifests/
+installer/
 VERSION
 ```
 
-任何配置、原创脚本、上游规则或版本文件的变化都会改变 `inputs_hash`，从而触发
-下一次月度发布，即使上游没有变化。
+任何配置、原创脚本、安装器、上游规则或版本文件的变化都会改变 `inputs_hash`，
+从而触发下一次月度发布，即使上游没有变化。
+
+## uosc UI 缩放补丁
+
+`build/assemble.py` 在安装完上游 `uosc.zip` 后调用 `build/patch_uosc.py`，在
+`scripts/uosc/main.lua` 中插入 `scale=0` 自动缩放模式：按当前显示器较短边
+除以 1080 计算倍率（1080p 为 100%），并观察 `display-width` / `display-height`，
+窗口拖到另一块显示器时重新计算。正数 `scale` 仍保持上游“OS DPI 因子 × 用户值”
+的语义。补丁锚点在上游更新后找不到时构建会明确失败；被打补丁的文件带有本项目
+名称与修改日期的说明，其余 uosc 文件保持上游原样。
 
 ## 缩略图引擎
 

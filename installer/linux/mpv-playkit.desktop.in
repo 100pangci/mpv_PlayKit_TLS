@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=mpv PlayKit
+GenericName=Media Player
+GenericName[zh_CN]=媒体播放器
+Comment=Play media with mpv PlayKit
+Comment[zh_CN]=使用 mpv PlayKit 播放媒体
+Exec=@EXEC@ %U
+TryExec=@EXEC@
+Icon=@ICON@
+Terminal=false
+Categories=AudioVideo;Player;Video;
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;audio/mpeg;audio/flac;audio/ogg;audio/opus;audio/x-wav;audio/mp4;application/ogg;
+StartupNotify=true

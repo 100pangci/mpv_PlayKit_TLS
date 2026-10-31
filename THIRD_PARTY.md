@@ -8,7 +8,7 @@
 | mpv (Windows) | [shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake) | 播放器 | GPL-2.0-or-later / LGPL-2.1-or-later（按组件） | `mpv.exe`, `mpv.com`, `d3dcompiler_43.dll` |
 | mpv (Linux) | [pkgforge-dev/mpv-AppImage](https://github.com/pkgforge-dev/mpv-AppImage) | 播放器运行时 | GPL-3.0-or-later AND GPL-2.0-or-later；其中 mpv 本体为 GPL-2.0-or-later / LGPL-2.1-or-later | `mpv/` |
 | yt-dlp | [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) | 在线视频解析 | Unlicense | `yt-dlp.exe` / `yt-dlp` |
-| uosc | [tomasklaen/uosc](https://github.com/tomasklaen/uosc) | UI 与菜单 | LGPL-2.1-or-later；内含 MIT（`lib/fzy.lua`）、MPL-2.0（`lib/utils.lua` 的 thumbfast FFI 片段）、Apache-2.0（图标字体） | `portable_config/scripts/uosc/` |
+| uosc | [tomasklaen/uosc](https://github.com/tomasklaen/uosc) | UI 与菜单 | LGPL-2.1-or-later；内含 MIT（`lib/fzy.lua`）、MPL-2.0（`lib/utils.lua` 的 thumbfast FFI 片段）、Apache-2.0（图标字体）；`main.lua` 含本项目构建时补丁（见下文） | `portable_config/scripts/uosc/` |
 | uosc / Material Icons | [google/material-design-icons](https://github.com/google/material-design-icons) | uosc 图标字体 | Apache-2.0 | `portable_config/fonts/uosc_icons.otf` |
 | fzy (Lua) | [swarn/fzy-lua](https://github.com/swarn/fzy-lua) | uosc 菜单模糊匹配 | MIT | `portable_config/scripts/uosc/lib/fzy.lua` |
 | thumbfast FFI 片段 | [po5/thumbfast](https://github.com/po5/thumbfast) | uosc 缩略图 FFI 声明 | MPL-2.0 | `portable_config/scripts/uosc/lib/utils.lua` |
@@ -60,7 +60,13 @@ SPDX**（例如 `LICENSE.LGPL` 标为 `LGPL-2.1-or-later`，`LICENSE.GPL` 标为
 
 - mpv 的 GPL/LGPL 义务由对应上游构建与许可证原文承担；再分发时不要删除
   `licenses/` 或修改二进制。
-- uosc 以 LGPL-2.1 发布；本项目不修改 uosc 源码，直接使用上游 `uosc.zip`。
+- uosc 以 LGPL-2.1-or-later 发布。构建时先解压上游 `uosc.zip`，再由
+  `build/patch_uosc.py` 对 `scripts/uosc/main.lua` 打一个小补丁：新增
+  `scale=0` 自动缩放模式，按当前显示器较短边计算 UI 倍率（1080p 为 100%），
+  并在窗口移到另一块显示器时重新计算。补丁位置带有本项目名称和日期
+  （2026-10-31）的显著修改说明，其余 uosc 文件保持上游原样；完整源码即包内
+  的 Lua 文件，符合 LGPL-2.1 对修改与源码的要求。上游发布若改动补丁锚点，
+  构建会明确失败而不是静默发布未打补丁的 UI。
   uosc 的 `lib/fzy.lua`（MIT）和 `lib/utils.lua` 内的 MPL-2.0 片段保留原文件头；
   对应的完整许可证文本也放在 `licenses/uosc/`。uosc 附带的 `ziggy-*` 辅助程序
   源码位于上游仓库的同一 Release 标签，包内保留其许可证与来源记录。

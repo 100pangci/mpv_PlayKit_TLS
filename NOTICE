@@ -2,16 +2,21 @@ mpv PlayKit TLS
 Copyright (C) 2026 mpv PlayKit TLS contributors
 
 This project's original material - configuration files, build tooling,
-documentation, and the Lua scripts under scripts/local/ and updater/ - is
-licensed under the GNU General Public License, version 3 or (at your option)
-any later version.  The full license text is in LICENSE.
+documentation, the installer scripts under installer/, and the Lua scripts
+under scripts/local/ and updater/ - is licensed under the GNU General Public
+License, version 3 or (at your option) any later version.  The full license
+text is in LICENSE.
 
 Third-party components are not covered by the project's GPL license.  They are
 fetched at build time and remain under their own upstream licenses:
 
   uosc                         LGPL-2.1-or-later
                                (includes MIT lib/fzy.lua and an MPL-2.0
-                               thumbfast FFI snippet; notices kept in-file)
+                               thumbfast FFI snippet; notices kept in-file.
+                               scripts/uosc/main.lua carries a documented
+                               mpv PlayKit build-time patch, dated 2026-10-31,
+                               that adds the automatic UI scale; the full
+                               modified source is included in every package.)
   mpv (Windows build)          GPL-2.0-or-later / LGPL-2.1-or-later
   mpv (Linux AppImage)         GPL-3.0-or-later / GPL-2.0-or-later
   LXGW WenKai Mono Lite        OFL-1.1

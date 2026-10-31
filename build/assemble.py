@@ -28,6 +28,7 @@ from .common import (
 )
 from .extract import DEFAULT_REMOVED_HOOKS, extract_component, hook_is_removed
 from .inputs import compute_inputs_hash
+from .patch_uosc import patch_uosc
 
 LAUNCHER = """#!/bin/sh
 # mpv PlayKit launcher for Linux.
@@ -45,6 +46,14 @@ README_TEMPLATE = """mpv PlayKit {version} ({platform})
 ====
 Windows: 双击 mpv.exe
 Linux:   在终端运行 ./mpv-playkit
+
+Windows 可选安装
+================
+双击 installer\\windows\\install.cmd 可将播放器安装到当前用户目录，并创建
+开始菜单/桌面快捷方式、右键菜单与“打开方式”注册。安装不需要管理员权限。
+静默安装：install.cmd -Silent
+卸载：installer\\windows\\uninstall.cmd（或开始菜单中的卸载项）。
+Linux 安装器接口已预留但尚未实现，详见 installer/README.md。
 
 portable_config/ 内是完整配置。本项目原创部分按 GPL-3.0-or-later 分发，
 见 LICENSE 与 NOTICE；第三方组件保留各自许可证，见 THIRD_PARTY.md 与 licenses/。
@@ -245,11 +254,31 @@ def verify_stage_minimum(stage: Path, platform: str) -> None:
         stage / "playkit-version.json",
         stage / "LICENSE",
         stage / "NOTICE",
+        stage / "installer" / "README.md",
     ]
     if platform == "windows-x64":
-        required.extend([stage / "mpv.exe", stage / "yt-dlp.exe"])
+        required.extend(
+            [
+                stage / "mpv.exe",
+                stage / "yt-dlp.exe",
+                stage / "installer" / "windows" / "install.ps1",
+                stage / "installer" / "windows" / "uninstall.ps1",
+                stage / "installer" / "windows" / "install.cmd",
+                stage / "installer" / "windows" / "uninstall.cmd",
+                stage / "installer" / "windows" / "mpv-playkit.ico",
+            ]
+        )
     elif platform == "linux-x64":
-        required.extend([stage / "mpv" / "AppRun", stage / "mpv-playkit", stage / "yt-dlp"])
+        required.extend(
+            [
+                stage / "mpv" / "AppRun",
+                stage / "mpv-playkit",
+                stage / "yt-dlp",
+                stage / "installer" / "linux" / "install.sh",
+                stage / "installer" / "linux" / "mpv-playkit.desktop.in",
+                stage / "installer" / "linux" / "mpv-playkit.svg",
+            ]
+        )
     else:
         fail(f"unknown platform: {platform}")
     for path in required:
@@ -303,6 +332,12 @@ def main(argv: list[str] | None = None) -> int:
 
     copy_configuration(stage, args.platform)
 
+    installer = ROOT / "installer"
+    if not installer.is_dir():
+        fail("installer directory is missing")
+    copy_tree(installer, stage / "installer")
+    log("installed installer scripts")
+
     for identifier, component in sorted(components.items()):
         if identifier not in lock.get("components", {}):
             fail(f"{identifier}: manifest component has no lock entry")
@@ -314,6 +349,10 @@ def main(argv: list[str] | None = None) -> int:
             component, lock["components"][identifier], fetched[identifier], work, args.platform
         )
         install_component(stage, component, source_root, work, args.platform)
+
+    # uosc is fetched unmodified, then receives our small automatic UI-scale
+    # patch (see build/patch_uosc.py and THIRD_PARTY.md).
+    patch_uosc(stage)
 
     if args.platform == "linux-x64":
         launcher = stage / "mpv-playkit"

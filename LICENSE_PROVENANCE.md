@@ -61,8 +61,12 @@ part of mpv (GPL-2.0-or-later / LGPL-2.1-or-later), not from the unlicensed
 baseline `Logo.lua`. The Lua drawing code is original; mpv's license texts are
 shipped in `licenses/`.
 
-uosc itself is downloaded unmodified from the upstream release at build time.
-Its bundled `lib/fzy.lua` (MIT) and the MPL-2.0 FFI snippet in `lib/utils.lua`
+uosc itself is downloaded from the upstream release at build time and then
+receives one documented patch: `build/patch_uosc.py` adds the automatic
+UI-scale mode (`scale=0`) to `scripts/uosc/main.lua`, with a prominent
+modification notice and date in the file. All other uosc files stay upstream
+verbatim, and the patched Lua source ships in every package. Its bundled
+`lib/fzy.lua` (MIT) and the MPL-2.0 FFI snippet in `lib/utils.lua`
 keep their in-file notices, and their full license texts are added to
 `licenses/uosc/`. The repository's original code is licensed under
 GPL-3.0-or-later; every third-party component remains under its own upstream

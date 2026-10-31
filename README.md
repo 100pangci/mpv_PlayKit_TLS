@@ -26,11 +26,16 @@ uosc 界面与菜单、完整快捷键、时间轴缩略图、属性保存、统
 发布页：<https://github.com/100pangci/mpv_PlayKit_TLS/releases>
 
 - Windows：解压 `mpv-PlayKit-<version>-windows-x64.zip`，双击 `mpv.exe`。
+  也可以双击 `installer\windows\install.cmd` 安装到当前用户目录，创建开始菜单、
+  桌面快捷方式、右键菜单和“打开方式”注册（不需要管理员权限，详见
+  [installer/README.md](installer/README.md)）。
 - Linux：解压 `mpv-PlayKit-<version>-linux-x64.tar.gz`，在终端运行：
 
   ```sh
   ./mpv-PlayKit-<version>-linux-x64/mpv-playkit
   ```
+
+  Linux 安装器接口已预留但尚未实现（`installer/linux/`）。
 
 `portable_config/` 是完整配置目录。第三方组件的许可证原文位于包内 `licenses/`，
 `licenses/INDEX.json` 记录每个文件的来源和 SHA-256。
@@ -57,6 +62,7 @@ config/
   windows/           Windows 平台配置
   linux/             Linux 平台配置
 scripts/local/       本项目原创或重写的 Lua（构建时复制到 scripts/ 根目录）
+installer/           可选的 Windows 安装/卸载脚本与 Linux 安装接口占位
 updater/             播放器内更新检测器
 manifests/           上游来源、资产匹配规则、安装规则
 sources.lock.json    当前固定的上游版本与哈希

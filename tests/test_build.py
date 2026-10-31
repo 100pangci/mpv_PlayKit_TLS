@@ -165,6 +165,93 @@ class InputsTests(unittest.TestCase):
             self.assertNotEqual(first, second)
 
 
+class UoscPatchTests(unittest.TestCase):
+    def test_patch_is_applied_and_idempotent(self) -> None:
+        from build.patch_uosc import MARKER, OBSERVER_ANCHOR, SCALE_ANCHOR, patch_uosc
+
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = Path(temporary)
+            main = stage / "portable_config" / "scripts" / "uosc" / "main.lua"
+            main.parent.mkdir(parents=True)
+            main.write_text(
+                "function update_display_dimensions()\n"
+                + SCALE_ANCHOR
+                + "\nend\n"
+                + OBSERVER_ANCHOR
+                + "\n",
+                encoding="utf-8",
+            )
+            patch_uosc(stage)
+            patched = main.read_text(encoding="utf-8")
+            self.assertIn(MARKER, patched)
+            self.assertIn("local user_scale = options.scale", patched)
+            self.assertIn("mp.observe_property('display-width'", patched)
+            patch_uosc(stage)
+            self.assertEqual(main.read_text(encoding="utf-8"), patched)
+
+    def test_patch_fails_when_upstream_moves_anchor(self) -> None:
+        from build.common import BuildError
+        from build.patch_uosc import patch_uosc
+
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = Path(temporary)
+            main = stage / "portable_config" / "scripts" / "uosc" / "main.lua"
+            main.parent.mkdir(parents=True)
+            main.write_text("function update_display_dimensions()\nend\n", encoding="utf-8")
+            with self.assertRaises(BuildError):
+                patch_uosc(stage)
+
+
+class InstallerTests(unittest.TestCase):
+    def test_windows_installer_files(self) -> None:
+        windows = ROOT / "installer" / "windows"
+        for name in (
+            "install.ps1",
+            "uninstall.ps1",
+            "install.cmd",
+            "uninstall.cmd",
+            "mpv-playkit.ico",
+        ):
+            self.assertTrue((windows / name).is_file(), name)
+        install = (windows / "install.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("HKCU", install)
+        self.assertNotIn("HKLM", install)
+        self.assertIn("Uninstall\\mpv-playkit", install)
+        for marker in ("App Paths", "RegisteredApplications", "SystemFileAssociations", "Capabilities"):
+            self.assertIn(marker, install)
+        # SupportedTypes is a list of value names, not subkeys.
+        self.assertIn("Applications\\mpv.exe\\SupportedTypes", install)
+        self.assertNotIn("SupportedTypes\\.$ext", install)
+        uninstall = (windows / "uninstall.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("KeepUserData", uninstall)
+        # The Capabilities key lives under Software\Clients\Media\mpv-playkit,
+        # so removing that parent key covers it.
+        for marker in (
+            "App Paths",
+            "RegisteredApplications",
+            "SystemFileAssociations",
+            "Software\\Clients\\Media\\mpv-playkit",
+        ):
+            self.assertIn(marker, uninstall)
+
+    def test_linux_installer_is_a_placeholder(self) -> None:
+        linux = ROOT / "installer" / "linux"
+        script = (linux / "install.sh").read_text(encoding="utf-8")
+        self.assertIn("尚未实现", script)
+        self.assertIn("--prefix", script)
+        desktop = (linux / "mpv-playkit.desktop.in").read_text(encoding="utf-8")
+        self.assertIn("@EXEC@", desktop)
+        self.assertIn("@ICON@", desktop)
+
+    def test_installer_is_part_of_inputs(self) -> None:
+        from build.inputs import input_files
+
+        names = {str(path.relative_to(ROOT)).replace("\\", "/") for path in input_files()}
+        self.assertIn("installer/README.md", names)
+        self.assertIn("installer/windows/install.ps1", names)
+        self.assertIn("installer/linux/install.sh", names)
+
+
 class ReleaseChecksumTests(unittest.TestCase):
     def test_checksums_only_list_published_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

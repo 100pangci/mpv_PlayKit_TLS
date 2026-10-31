@@ -1,5 +1,9 @@
 * text=auto eol=lf
 
+# Windows launchers must be checked out with CRLF, including on Linux CI.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ico binary
 *.png binary
 *.jpg binary
 *.ttf binary

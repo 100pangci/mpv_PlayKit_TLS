@@ -10,6 +10,7 @@ INPUT_PATHS = (
     "scripts/local",
     "updater",
     "manifests",
+    "installer",
     "VERSION",
     # These are copied into every package; changing them must trigger a build.
     "LICENSE",

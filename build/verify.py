@@ -29,9 +29,25 @@ REQUIRED = [
     "LICENSE",
     "NOTICE",
     "THIRD_PARTY.md",
+    "installer/README.md",
 ]
-WINDOWS_REQUIRED = ["mpv.exe", "yt-dlp.exe"]
-LINUX_REQUIRED = ["mpv/AppRun", "mpv-playkit", "yt-dlp"]
+WINDOWS_REQUIRED = [
+    "mpv.exe",
+    "yt-dlp.exe",
+    "installer/windows/install.ps1",
+    "installer/windows/uninstall.ps1",
+    "installer/windows/install.cmd",
+    "installer/windows/uninstall.cmd",
+    "installer/windows/mpv-playkit.ico",
+]
+LINUX_REQUIRED = [
+    "mpv/AppRun",
+    "mpv-playkit",
+    "yt-dlp",
+    "installer/linux/install.sh",
+    "installer/linux/mpv-playkit.desktop.in",
+    "installer/linux/mpv-playkit.svg",
+]
 
 # Every license text promised by THIRD_PARTY.md must be present, and
 # licenses/INDEX.json must carry a per-file SPDX label and source URL for it.
@@ -84,6 +100,39 @@ def check_forbidden(path: str) -> None:
         fail(f"forbidden file type in package: {path}")
     if suffix == ".hook" and hook_is_removed(Path(path).name, DEFAULT_REMOVED_HOOKS):
         fail(f"runtime self-update/download hook in package: {path}")
+
+
+def check_installer(stage: Path, platform: str) -> None:
+    if platform == "windows-x64":
+        install = (stage / "installer" / "windows" / "install.ps1").read_text(encoding="utf-8")
+        if "HKLM" in install:
+            fail("install.ps1 must only write HKCU, not HKLM")
+        if "Uninstall\\mpv-playkit" not in install:
+            fail("install.ps1 does not register the uninstall entry")
+        for marker in ("App Paths", "RegisteredApplications", "SystemFileAssociations", "Capabilities"):
+            if marker not in install:
+                fail(f"install.ps1 is missing the {marker} registration")
+        uninstall = (stage / "installer" / "windows" / "uninstall.ps1").read_text(encoding="utf-8")
+        if "HKLM" in uninstall:
+            fail("uninstall.ps1 must only write HKCU, not HKLM")
+        # Capabilities is a child of Software\Clients\Media\mpv-playkit, so
+        # deleting that parent removes it.
+        for marker in (
+            "App Paths",
+            "RegisteredApplications",
+            "SystemFileAssociations",
+            "Software\\Clients\\Media\\mpv-playkit",
+        ):
+            if marker not in uninstall:
+                fail(f"uninstall.ps1 is missing the {marker} cleanup")
+    elif platform == "linux-x64":
+        script = (stage / "installer" / "linux" / "install.sh").read_text(encoding="utf-8")
+        if "尚未实现" not in script:
+            fail("Linux installer must stay an explicit placeholder")
+        desktop = (stage / "installer" / "linux" / "mpv-playkit.desktop.in").read_text(encoding="utf-8")
+        for token in ("@EXEC@", "@ICON@"):
+            if token not in desktop:
+                fail(f"desktop template is missing {token}")
 
 
 def check_licenses(stage: Path, platform: str) -> None:
@@ -141,6 +190,13 @@ def check_stage(stage: Path, platform: str, version: str | None) -> None:
     if gate == -1 or subprocess_call == -1 or gate > subprocess_call:
         fail("update-check.lua must gate on enabled=no before any subprocess call")
 
+    uosc_main = (portable / "scripts" / "uosc" / "main.lua").read_text(encoding="utf-8")
+    if "-- Modified by mpv PlayKit" not in uosc_main:
+        fail("uosc main.lua is missing the mpv PlayKit automatic UI-scale patch")
+    uosc_conf = (portable / "script-opts" / "uosc.conf").read_text(encoding="utf-8")
+    if not re.search(r"^scale=0\s*$", uosc_conf, re.MULTILINE):
+        fail("uosc.conf must enable the automatic UI scale (scale=0)")
+
     manifest = read_json(stage / "manifest.json")
     if version and manifest.get("playkit_version") != version:
         fail(f"manifest version mismatch: {manifest.get('playkit_version')} != {version}")
@@ -148,6 +204,7 @@ def check_stage(stage: Path, platform: str, version: str | None) -> None:
         fail(f"manifest platform mismatch: {manifest.get('platform')} != {platform}")
     if not manifest.get("components"):
         fail("manifest has no components")
+    check_installer(stage, platform)
     check_licenses(stage, platform)
     log(f"verified stage {stage} ({platform})")
 
