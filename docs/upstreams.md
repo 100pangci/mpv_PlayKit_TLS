@@ -50,12 +50,13 @@
 - 发布工作流只在 `lock_changed=true` 时把新 lock 提交回仓库；这个判断同样基于
   忽略 `generated_at` 的内容哈希。
 
-## 私有仓库与 API
+## API 认证与访问
 
 `build.upstream` 通过 `GITHUB_TOKEN` 或 `GH_TOKEN` 认证。GitHub Actions 中
 `monthly-update.yml` 把 `secrets.GITHUB_TOKEN` 注入环境；本地运行时如遇速率限制，
 可设置 `GITHUB_TOKEN`。下载 Release 资产使用 API URL + `Accept:
-application/octet-stream`，因此在私有仓库中也能工作。
+application/octet-stream`，公开仓库和私有仓库都能工作。仓库公开后匿名请求也可
+读取 Release，但构建仍使用 token 以避免 API 速率限制。
 
 ## uosc 与缩略图
 
