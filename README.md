@@ -109,7 +109,8 @@ Ubuntu runner。
 
 - 自动：`Monthly update` 工作流按 cron 运行。
 - 手动强制发布：`Actions` → `Monthly update` → `Run workflow`，勾选 `force`。
-- 只构建不发布：运行 `Build` 工作流，产物在 Actions artifacts 中保留 14 天。
+- 只构建不发布：运行 `Build` 工作流，产物在 Actions 运行结束后通过缓存保留，
+  可在运行日志中查看构建结果。
 - 固定到新的上游版本：运行 `build.resolve` 生成新的 `sources.lock.json` 并提交；
   下一次检查会因 lock/inputs 变化触发构建。
 

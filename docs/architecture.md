@@ -138,7 +138,10 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 | --- | --- | --- |
 | `monthly-update.yml` | 每月 1 日 05:17 UTC；手动 | resolve → decide → 有变化才调用 build → release |
 | `build.yml` | push、PR、手动、被调用 | 单元测试 + Windows/Linux 构建、冒烟、打包、校验 |
-| `release.yml` | 被 `monthly-update.yml` 调用 | 下载两个平台 artifact，必要时提交新 lock，生成发布元数据并创建 Release |
+| `release.yml` | 被 `monthly-update.yml` 调用 | 从 Actions 缓存取回两个平台产物，生成发布元数据并创建 Release |
+
+两个平台的构建产物通过 Actions 缓存（不是 artifact 存储）传递给 release 作业，
+避免私有仓库的 artifact 配额限制。缓存键包含 `run_id` 与 `run_attempt`。
 
 `build.yml` 中两个平台作业并行；`release.yml` 只在两者都成功后运行。
 

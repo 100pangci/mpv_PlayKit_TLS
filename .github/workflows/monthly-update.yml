@@ -33,6 +33,7 @@ jobs:
       tag: ${{ steps.decide.outputs.tag }}
       lock_changed: ${{ steps.decide.outputs.lock_changed }}
       reason: ${{ steps.decide.outputs.reason }}
+      source_sha: ${{ steps.revision.outputs.source_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,13 +64,22 @@ jobs:
             --repository "${{ github.repository }}" \
             --github-output "$GITHUB_OUTPUT" \
             $extra
-      - name: Upload fresh lock
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: sources-lock
-          path: .work/sources.lock.json
-          if-no-files-found: error
-          retention-days: 14
+      - name: Commit fresh lock
+        id: lock
+        if: steps.decide.outputs.lock_changed == 'true'
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cp .work/sources.lock.json sources.lock.json
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sources.lock.json
+          git commit -m "chore: update upstream lock"
+          git push origin "HEAD:${TARGET_BRANCH}"
+      - name: Record build revision
+        id: revision
+        run: echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Report decision
         run: |
           echo "::notice::release_needed=${{ steps.decide.outputs.release_needed }} version=${{ steps.decide.outputs.version }} reason=${{ steps.decide.outputs.reason }}"
@@ -80,8 +90,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
-      lock_artifact: sources-lock
-      source_sha: ${{ github.sha }}
+      source_sha: ${{ needs.resolve.outputs.source_sha }}
 
   release:
     needs: [resolve, build]
@@ -90,5 +99,4 @@ jobs:
     with:
       version: ${{ needs.resolve.outputs.version }}
       tag: ${{ needs.resolve.outputs.tag }}
-      lock_changed: ${{ needs.resolve.outputs.lock_changed }}
-      source_sha: ${{ github.sha }}
+      source_sha: ${{ needs.resolve.outputs.source_sha }}

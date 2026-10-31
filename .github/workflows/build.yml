@@ -15,11 +15,6 @@ on:
       version:
         type: string
         required: true
-      lock_artifact:
-        description: Optional artifact containing a fresh sources.lock.json
-        type: string
-        required: false
-        default: ""
       source_sha:
         type: string
         required: false
@@ -31,6 +26,7 @@ permissions:
 env:
   PYTHONUNBUFFERED: "1"
   PYTHONIOENCODING: "utf-8"
+  GITHUB_TOKEN: ${{ github.token }}
 
 jobs:
   tests:
@@ -38,6 +34,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -56,6 +55,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -63,16 +65,6 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
-      - name: Download fresh lock
-        if: inputs.lock_artifact != ''
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: ${{ inputs.lock_artifact }}
-          path: .work/lock
-      - name: Overlay fresh lock
-        if: inputs.lock_artifact != ''
-        shell: pwsh
-        run: Copy-Item .work/lock/sources.lock.json sources.lock.json
       - name: Restore download cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -105,15 +97,11 @@ jobs:
         run: |
           $asset = (Get-ChildItem -Path dist/out -Filter *.zip | Select-Object -First 1).FullName
           python -m build.verify --asset "$asset" --platform windows-x64 --version "${{ inputs.version || 'ci' }}"
-      - name: Upload artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: Save package for release
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: windows-x64
-          path: |
-            dist/out/*.zip
-            dist/out/*.zip.sha256
-          if-no-files-found: error
-          retention-days: 14
+          path: dist/out
+          key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-windows-x64
 
   linux-x64:
     needs: tests
@@ -121,6 +109,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -131,15 +122,6 @@ jobs:
           python -m pip install -r requirements.txt
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends p7zip-full squashfs-tools
-      - name: Download fresh lock
-        if: inputs.lock_artifact != ''
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: ${{ inputs.lock_artifact }}
-          path: .work/lock
-      - name: Overlay fresh lock
-        if: inputs.lock_artifact != ''
-        run: cp .work/lock/sources.lock.json sources.lock.json
       - name: Restore download cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -171,12 +153,8 @@ jobs:
         run: |
           asset="$(ls dist/out/*.tar.gz | head -n 1)"
           python -m build.verify --asset "$asset" --platform linux-x64 --version "${{ inputs.version || 'ci' }}"
-      - name: Upload artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: Save package for release
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: linux-x64
-          path: |
-            dist/out/*.tar.gz
-            dist/out/*.tar.gz.sha256
-          if-no-files-found: error
-          retention-days: 14
+          path: dist/out
+          key: playkit-package-${{ github.run_id }}-${{ github.run_attempt }}-linux-x64
