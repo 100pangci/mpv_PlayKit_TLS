@@ -539,6 +539,34 @@ fn discard_policy_starts_from_the_new_official_configuration() {
 }
 
 #[test]
+fn install_without_state_uses_new_official_and_backs_up_edits() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("playkit");
+    fs::create_dir(&root).unwrap();
+    setup_old_install(&root);
+    write_file(
+        root.join("portable_config/mpv.conf"),
+        "volume=70\nosc=yes\nuser-option=1\n",
+    );
+    fs::remove_dir_all(root.join("portable_config/.playkit")).unwrap();
+    fs::remove_file(root.join("playkit-inventory.json")).unwrap();
+    let release = make_release(&dir.path().join("release"), NEW_VERSION);
+
+    install(&install_options(&root, &release, UnmanagedPolicy::Capture)).unwrap();
+    let mpv_conf = fs::read_to_string(root.join("portable_config/mpv.conf")).unwrap();
+    assert!(mpv_conf.contains("volume=100"), "{mpv_conf}");
+    assert!(mpv_conf.contains("new-option=yes"), "{mpv_conf}");
+    assert!(!mpv_conf.contains("user-option=1"), "{mpv_conf}");
+    assert!(!root
+        .join("portable_config/user/patches/auto/mpv.conf.patch")
+        .is_file());
+    let backup =
+        fs::read_to_string(root.join("portable_config/user/backup/pre-update-2026.10/mpv.conf"))
+            .unwrap();
+    assert!(backup.contains("user-option=1"), "{backup}");
+}
+
+#[test]
 fn same_version_is_blocked_before_downloading() {
     let dir = tempdir().unwrap();
     let root = dir.path().join("playkit");

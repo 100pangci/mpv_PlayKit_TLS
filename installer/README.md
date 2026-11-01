@@ -48,8 +48,10 @@ installer\windows\uninstall.cmd -Silent [-KeepUserData]
 - 覆盖安装前，如果目标已有 `playkit-version.json`，安装器会先调用旧安装目录中的
   `updater\playkit-updater.exe capture`，把用户对生成配置的直接
   编辑保存为 `portable_config\user\patches\auto\` 下的 patch；捕获失败会中止
-  安装，不会静默覆盖配置。旧版本没有 helper 时只记录警告，并保留
-  `portable_config\user`。
+  安装，不会静默覆盖配置。旧版本没有 helper 时，安装器会先把现有的
+  `mpv.conf`、`input.conf`、`profiles.conf`、`platform.conf` 和
+  `script-opts\*.conf` 备份到 `portable_config\user\backup\pre-update-<版本>\`，
+  再覆盖安装。
 - 复制完成后调用新包的 `repair`，以新官方配置重建 `.playkit\official` 与
   `.playkit\generated`，重新应用手动/自动 patch 和用户脚本、字体、script-opts。
   因此安装器覆盖安装与播放器内自动更新的结果一致。

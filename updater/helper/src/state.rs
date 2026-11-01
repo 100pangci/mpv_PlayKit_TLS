@@ -264,8 +264,9 @@ pub fn verify_state(portable: &Path) -> Result<Vec<String>> {
         }
     }
     for relative in &state.patches {
-        let patch = patch_dir(portable).join(format!("{relative}.patch"));
-        if !patch.is_file() {
+        let manual = patch_dir(portable).join(format!("{relative}.patch"));
+        let automatic = auto_patch_dir(portable).join(format!("{relative}.patch"));
+        if !manual.is_file() && !automatic.is_file() {
             warnings.push(format!("patch 文件缺失：{relative}"));
         }
     }

@@ -93,11 +93,40 @@ function Copy-Package {
     # The new package is then copied over the installation, preserving user/
     # (and runtime state) and re-applying the captured patches afterwards.
     if (Test-Path -LiteralPath (Join-Path $targetFull 'playkit-version.json')) {
+        $oldVersion = 'unknown'
+        try {
+            $oldMeta = Get-Content -Raw -LiteralPath (Join-Path $targetFull 'playkit-version.json') | ConvertFrom-Json
+            if ($oldMeta.playkit_version) {
+                $oldVersion = ([string]$oldMeta.playkit_version) -replace '[^0-9A-Za-z._-]', '_'
+            }
+        } catch {
+            Write-Log '无法读取旧版本号，备份目录将标记为 unknown。'
+        }
         Write-Log '正在保存旧版本中的用户配置修改...'
         try {
             $captured = Invoke-Updater -Root $targetFull -Arguments @('capture', '--root', $targetFull, '--quiet')
             if (-not $captured) {
-                Write-Log '旧版本没有更新器，无法捕获直接编辑；将保留 portable_config\user。'
+                # A pre-updater install has no helper to capture direct edits.
+                # Keep the old generated configs before the new package replaces
+                # them; the updater can only migrate files it can still read.
+                $backupRoot = Join-Path $targetFull "portable_config\user\backup\pre-update-$oldVersion"
+                foreach ($relative in @('mpv.conf', 'input.conf', 'profiles.conf', 'platform.conf')) {
+                    $source = Join-Path $targetFull "portable_config\$relative"
+                    if (Test-Path -LiteralPath $source) {
+                        $destination = Join-Path $backupRoot $relative
+                        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+                        Copy-Item -LiteralPath $source -Destination $destination -Force
+                    }
+                }
+                $scriptOpts = Join-Path $targetFull 'portable_config\script-opts'
+                if (Test-Path -LiteralPath $scriptOpts) {
+                    Get-ChildItem -LiteralPath $scriptOpts -Filter '*.conf' -File | ForEach-Object {
+                        $destination = Join-Path $backupRoot "script-opts\$($_.Name)"
+                        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+                        Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
+                    }
+                }
+                Write-Log "旧版本没有更新器，已把原配置备份到 portable_config\user\backup\pre-update-$oldVersion。"
             }
         } catch {
             throw "无法保存旧版本的用户配置，安装已停止：$($_.Exception.Message)"

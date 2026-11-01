@@ -555,6 +555,31 @@ fn capture_user_edits(
         if !changed {
             continue;
         }
+        if context.state_old.is_none() && context.policy == UnmanagedPolicy::Capture {
+            // There is no generated/official snapshot to compare against, so
+            // differences include both user edits and changes made by the new
+            // official configuration.  Turning those into patches would freeze
+            // old official values.  Preserve the old files as a backup and
+            // start from the new official configuration instead.
+            if current_exists {
+                let backup = context
+                    .target_user_dir
+                    .join("backup")
+                    .join(format!("pre-update-{}", context.version_label))
+                    .join(&target);
+                if !backup.exists() {
+                    copy_file(&current_path, &backup)?;
+                }
+            }
+            if !migration_warned {
+                warnings.push(
+                    "旧安装没有配置基线，无法区分官方变更与用户修改；已备份原配置并使用新版本官方配置。"
+                        .to_string(),
+                );
+                migration_warned = true;
+            }
+            continue;
+        }
         match context.policy {
             UnmanagedPolicy::Abort => {
                 conflicts.push(target);
@@ -575,13 +600,6 @@ fn capture_user_edits(
             Some(path) => ConfigDoc::read(path, kind)?,
             None => ConfigDoc::parse("", kind)?,
         };
-        if context.state_old.is_none() && !migration_warned {
-            warnings.push(
-                "没有历史配置基线，已按当前配置与新版官方配置的差异生成用户 patch，并备份原配置。"
-                    .to_string(),
-            );
-            migration_warned = true;
-        }
         let unrepresentable = unrepresentable_lines(&current_doc, &baseline_doc);
         if !unrepresentable.is_empty() {
             return Err(Failure::blocked(
