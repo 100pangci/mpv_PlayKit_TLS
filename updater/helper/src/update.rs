@@ -994,6 +994,78 @@ fn install_user_assets(
     })
 }
 
+/// Remove generated copies of user assets that were recorded in the previous
+/// state but no longer exist under `user/`.  Only repair needs this: a fresh
+/// install starts from the new package, so it never contains old user copies.
+fn remove_stale_user_assets(
+    portable: &Path,
+    old_state: Option<&State>,
+    assets: &mut UserAssets,
+    warnings: &mut Vec<String>,
+) {
+    let Some(state) = old_state else {
+        return;
+    };
+    let mut changed = false;
+    for (label, directory, previous, current) in [
+        ("用户脚本", "scripts", &state.user_scripts, &assets.scripts),
+        ("用户字体", "fonts", &state.user_fonts, &assets.fonts),
+        (
+            "用户 script-opts",
+            "script-opts",
+            &state.user_script_opts,
+            &assets.script_opts,
+        ),
+    ] {
+        let root = portable.join(directory);
+        for relative in previous {
+            if current.iter().any(|item| item == relative) {
+                continue;
+            }
+            let relative_path = match crate::util::relative_path(relative) {
+                Ok(path) => path,
+                Err(error) => {
+                    warnings.push(format!(
+                        "忽略不安全的用户资源记录：{relative}（{}）",
+                        error.detail
+                    ));
+                    continue;
+                }
+            };
+            let path = root.join(relative_path);
+            if !path.is_file() {
+                continue;
+            }
+            match fs::remove_file(&path) {
+                Ok(()) => {
+                    changed = true;
+                    warnings.push(format!("已移除{label}的旧副本：{}", path.display()));
+                }
+                Err(error) => {
+                    warnings.push(format!(
+                        "无法移除{label}的旧副本 {}：{error}",
+                        path.display()
+                    ));
+                    continue;
+                }
+            }
+            let mut parent = path.parent();
+            while let Some(directory) = parent {
+                if directory == root || !directory.starts_with(&root) {
+                    break;
+                }
+                if fs::remove_dir(directory).is_err() {
+                    break;
+                }
+                parent = directory.parent();
+            }
+        }
+    }
+    if changed {
+        assets.changed = true;
+    }
+}
+
 /// Copy user assets into the generated configuration.  During a fresh install
 /// any existing target is an official file, so a same-name user file is a
 /// conflict.  During in-place repair, a target listed in the previous state is
@@ -1076,6 +1148,17 @@ fn copy_user_tree(
     Ok((result, changed))
 }
 
+struct PatchedTarget {
+    target: String,
+    /// Present when the official baseline was missing and has to be seeded
+    /// from the current config (or from an empty file).
+    official_seed: Option<Vec<u8>>,
+    copy_official: bool,
+    config_existed: bool,
+    rendered: String,
+    had_patch: bool,
+}
+
 fn apply_patches(
     portable: &Path,
     user_dir: &Path,
@@ -1086,6 +1169,10 @@ fn apply_patches(
     let mut applied = BTreeSet::new();
     warn_unknown_patch_files(user_dir, warnings)?;
 
+    // Parse and apply every patch in memory first.  Repair runs in place, so a
+    // malformed patch must not reset the current generated configs to the
+    // official baseline before the error is discovered.
+    let mut plans = Vec::new();
     for target in targets {
         let Some(kind) = managed_kind(&target) else {
             warnings.push(format!("忽略无法识别的 patch 目标：{target}"));
@@ -1093,16 +1180,18 @@ fn apply_patches(
         };
         let config_path = portable.join(&target);
         let official_path = official_dir(portable).join(&target);
-        if official_path.is_file() {
+        let config_existed = config_path.is_file();
+        let (mut doc, official_seed, copy_official) = if official_path.is_file() {
             // Always start from the verified official baseline.  This also
             // makes repair idempotent after an installer copied files.
-            copy_file(&official_path, &config_path)?;
-        } else if config_path.is_file() {
-            copy_file(&config_path, &official_path)?;
+            (ConfigDoc::read(&official_path, kind)?, None, true)
+        } else if config_existed {
+            let seed = fs::read(&config_path)
+                .map_err(|error| io_context(&format!("read {}", config_path.display()), error))?;
+            (ConfigDoc::read(&config_path, kind)?, Some(seed), false)
         } else {
-            atomic_write(&official_path, b"")?;
-        }
-        let mut doc = ConfigDoc::read(&official_path, kind)?;
+            (ConfigDoc::parse("", kind)?, Some(Vec::new()), false)
+        };
         let manual = patch_dir(portable).join(format!("{target}.patch"));
         let automatic = auto_patch_dir(portable).join(format!("{target}.patch"));
         let manual_v2 = v2_patch_dir(portable).join(format!("{target}.patch"));
@@ -1128,14 +1217,29 @@ fn apply_patches(
         if had_patch {
             applied.insert(target.clone());
         }
-        // Without a patch the file was just copied from the official baseline.
-        // Avoid rewriting it, so formatting-only changes do not make a repair
-        // look like a configuration change.  The fallback still creates a file
-        // for an otherwise empty target.
-        if had_patch || !config_path.is_file() {
-            doc.write(&config_path)?;
+        plans.push(PatchedTarget {
+            target,
+            official_seed,
+            copy_official,
+            config_existed,
+            rendered: doc.render(),
+            had_patch,
+        });
+    }
+
+    // Only write after every target applied successfully.
+    for plan in plans {
+        let config_path = portable.join(&plan.target);
+        let official_path = official_dir(portable).join(&plan.target);
+        if let Some(seed) = &plan.official_seed {
+            atomic_write(&official_path, seed)?;
         }
-        let generated_path = generated_dir(portable).join(&target);
+        if plan.had_patch || !plan.config_existed {
+            atomic_write(&config_path, plan.rendered.as_bytes())?;
+        } else if plan.copy_official {
+            copy_file(&official_path, &config_path)?;
+        }
+        let generated_path = generated_dir(portable).join(&plan.target);
         copy_file(&config_path, &generated_path)?;
         if !official_path.is_file() {
             copy_file(&config_path, &official_path)?;
@@ -1490,7 +1594,8 @@ fn repair_inner(options: &RepairOptions, layout: &Layout) -> Result<RepairReport
             warnings.push(format!("repair 前已备份未托管修改：{target}"));
         }
     }
-    let assets = install_user_assets(&portable, old_state.as_ref(), &mut warnings)?;
+    let mut assets = install_user_assets(&portable, old_state.as_ref(), &mut warnings)?;
+    remove_stale_user_assets(&portable, old_state.as_ref(), &mut assets, &mut warnings);
     // Migrate schema-1 automatic patches left by an older helper.  An empty
     // capture set preserves every existing automatic operation.
     merge_auto_patches(&portable.join("user"), &BTreeMap::new())?;

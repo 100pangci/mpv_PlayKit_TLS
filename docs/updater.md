@@ -137,7 +137,9 @@ playkit-updater --version
   `--if-needed` 先比较 `state.json` 中的用户层指纹（patch、用户脚本、字体、
   script-opts）以及版本、平台和快照是否存在；一致时直接退出，不重写配置。
   `update-check.lua` 每次启动都会调用这个模式，因此改完 patch 后重启即可
-  自动生效。
+  自动生效。所有 patch 会先在内存中解析并应用，任一目标失败时不写入任何
+  配置，当前生成文件保持不变；从 `user/` 删除的脚本、字体或 script-opts
+  也会在修复时移除对应的生成副本。
 - `relaunch`：等待指定 PID 退出后启动安装目录中的播放器。Lua 在自动修复
   改变配置且当前未加载媒体时用它完成一次自动重启；`--detach` 让 worker 脱离
   播放器进程，避免播放器退出时被一起结束。

@@ -298,9 +298,9 @@ Ctrl+u ignore
 - 字体放进 `user/fonts/`，复制到 `portable_config/fonts/`。
 - `user/script-opts/` 中的文件复制到 `portable_config/script-opts/`；与官方
   文件同名且内容不同会中止更新。
-- 更新器只复制这些目录，不会删除 `user/` 中的任何内容；删除用户脚本后，
-  下一次更新不会再把旧副本装回去（但旧的 `portable_config/scripts/` 副本会在
-  整目录替换时消失）。
+- 更新器只复制这些目录，不会删除 `user/` 中的任何内容。删除 `user/` 中的
+  脚本、字体或 script-opts 后，下一次 repair（包括启动自动修复）会移除对应的
+  生成副本；整目录更新时旧副本也会随新包消失。
 
 ## 回滚
 

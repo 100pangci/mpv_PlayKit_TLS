@@ -719,6 +719,41 @@ fn repair_if_needed_tracks_patch_changes_and_skips_an_unchanged_layer() {
 }
 
 #[test]
+fn invalid_patch_does_not_reset_the_current_generated_config() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("playkit");
+    fs::create_dir(&root).unwrap();
+    setup_old_install(&root);
+    let patch = root.join("portable_config/user/patches/v2/mpv.conf.patch");
+    write_file(&patch, "schema=2\ntarget=mpv.conf\n\n[global]\nvolume=55\n");
+    let options = || playkit_updater::update::RepairOptions {
+        root: root.clone(),
+        assume_official: false,
+        if_needed: false,
+        report_status: false,
+        quiet: true,
+    };
+
+    playkit_updater::update::repair(&options()).unwrap();
+    let config = root.join("portable_config/mpv.conf");
+    let before = fs::read(&config).unwrap();
+    assert!(String::from_utf8_lossy(&before).contains("volume=55"));
+
+    // The key operation would succeed, but the line selector does not exist.
+    // Repair must fail before touching the current generated configuration.
+    write_file(
+        &patch,
+        "schema=2\ntarget=mpv.conf\n\n[global]\nvolume=56\n\n@after line:不存在的行\n|# x\n@end\n",
+    );
+    let error = playkit_updater::update::repair(&options()).unwrap_err();
+    assert_eq!(error.kind, playkit_updater::util::ErrorKind::Blocked);
+    assert_eq!(fs::read(&config).unwrap(), before);
+    let text = fs::read_to_string(&config).unwrap();
+    assert!(text.contains("volume=55"), "{text}");
+    assert!(!text.contains("volume=56"), "{text}");
+}
+
+#[test]
 fn capture_refreshes_the_generated_snapshot_for_if_needed_repair() {
     let dir = tempdir().unwrap();
     let root = dir.path().join("playkit");
@@ -819,6 +854,46 @@ fn repair_refreshes_edited_user_assets_recorded_in_state() {
         fs::read_to_string(root.join("portable_config/scripts/mine.lua")).unwrap(),
         "-- updated user script\n"
     );
+}
+
+#[test]
+fn repair_removes_user_assets_deleted_from_the_user_layer() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("playkit");
+    fs::create_dir(&root).unwrap();
+    setup_old_install(&root);
+
+    let state_path = root.join("portable_config/.playkit/state.json");
+    let mut state: Value = serde_json::from_str(&fs::read_to_string(&state_path).unwrap()).unwrap();
+    state["user_scripts"] = json!(["gone.lua", "mine.lua"]);
+    write_json(&state_path, &state);
+    write_file(
+        root.join("portable_config/user/scripts/mine.lua"),
+        "-- keep me\n",
+    );
+    write_file(
+        root.join("portable_config/scripts/gone.lua"),
+        "-- stale copy\n",
+    );
+
+    let report = playkit_updater::update::repair(&playkit_updater::update::RepairOptions {
+        root: root.clone(),
+        assume_official: false,
+        if_needed: true,
+        report_status: false,
+        quiet: true,
+    })
+    .unwrap();
+    assert!(report.repaired);
+    assert!(report.changed);
+    assert!(!root.join("portable_config/scripts/gone.lua").exists());
+    assert_eq!(
+        fs::read_to_string(root.join("portable_config/scripts/mine.lua")).unwrap(),
+        "-- keep me\n"
+    );
+
+    let state: Value = serde_json::from_str(&fs::read_to_string(&state_path).unwrap()).unwrap();
+    assert_eq!(state["user_scripts"], json!(["mine.lua"]));
 }
 
 #[test]
