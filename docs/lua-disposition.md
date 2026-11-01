@@ -6,7 +6,8 @@
 
 目标：保留基线的用户可见功能，同时不复制任何许可证不明或无法逐文件确认的 Lua
 代码。能重写的功能使用本项目的原创实现；能由官方上游提供的功能使用上游原版；
-滤镜、着色器和 VapourSynth 相关内容不进入本发行版。
+VapourSynth 与 AI 滤镜不进入本发行版；少量许可证、来源明确的 GLSL shader 在
+构建时从上游获取。
 
 ## 9 个未解决文件
 
@@ -66,7 +67,8 @@ PowerShell、Python 或其他外部解释器；AB 并轨只使用 mpv 的
 
 ## 其他基线内容
 
-- 429 个 GLSL shader：全部不导入。
+- 基线 429 个 GLSL shader 中只导入 7 个许可证和上游来源明确的文件（构建期从
+  上游下载）；Ani4Kv2/AniSD 与 QCOM 不导入。
 - VapourSynth、AI 超分/补帧、CUDA、TensorRT、DirectML、模型：全部不导入。
 - 基线二进制、脚本包、字体（除另行按许可证获取的 LXGW 字体外）：不导入。
 - 基线 `mpv.conf` 的选项值只作为功能参考；本仓库配置重新编写。
@@ -75,8 +77,8 @@ PowerShell、Python 或其他外部解释器；AB 并轨只使用 mpv 的
 
 `build/verify.py` 拒绝：
 
-- `baseline/`、`shaders/`、`vs/`、`thumb_engine/`、`mpv-lazy/` 路径；
-- `.vpy`、`.onnx`、`.glsl` 文件；
+- `baseline/`、`vs/`、`thumb_engine/`、`mpv-lazy/` 路径；
+- `.vpy`、`.onnx`，以及 `manifests/shaders.yml` 未声明的 `.glsl`；
 - `self-updater`、`get-yt-dlp` 两类 AppImage hook；
 - `_cache/`、`saved-props.json`、`update-check-state.json` 等运行时状态。
 

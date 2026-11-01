@@ -73,3 +73,23 @@ GPL-3.0-or-later; every third-party component remains under its own upstream
 license, recorded in `sources.lock.json`, `THIRD_PARTY.md`, and the package's
 `licenses/INDEX.json`. See `docs/lua-disposition.md` for the full mapping and
 `NOTICE` for the third-party boundary and corresponding-source information.
+
+## Selected shader additions (2026-11-01)
+
+Only shaders whose upstream source, pinned revision, and per-file license are
+clear are added, as build-time downloads rather than committed assets:
+
+- Anime4K Restore and GAN upscale from `bloc97/Anime4K` (MIT).
+- FSRCNNX from the `igv/FSRCNN-TensorFlow` 1.1 release; the shader declares
+  LGPL-3.0-or-later.
+- NNEDI3 from `bjin/mpv-prescalers`; the repository and hook declare
+  LGPL-3.0-or-later.
+- k7 modernAnime and Adaptive sharpen lite from `hooke007/mpv_PlayKit` at the
+  same pinned commit audited above; their in-file notices are MIT and
+  BSD-2-Clause respectively.
+
+The Ani4Kv2/AniSD shaders remain excluded because their model weights are
+CC BY-NC 4.0. QCOM_SGEDS remains excluded because its code does not match the
+Snapdragon SGSR work named in its header and no separate copyright grant was
+found. `manifests/shaders.yml` records the exact source path and SHA-256 for
+every included file; `build.verify` rejects any other `.glsl` target.

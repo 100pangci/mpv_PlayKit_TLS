@@ -169,12 +169,133 @@ def render(template: str, context: dict[str, Any]) -> str:
         raise BuildError(f"could not render template {template!r}: {exc}") from exc
 
 
+def resolve_license_files(
+    license_info: dict[str, Any],
+    context: dict[str, Any],
+    *,
+    identifier: str,
+    commit_cache: dict[tuple[str, str], str] | None,
+    license_cache: dict[str, bytes] | None,
+) -> list[dict[str, Any]]:
+    license_files = []
+    for item in license_info.get("files", []):
+        license_repository = str(item["repository"])
+        license_ref = render(item["ref"], context)
+        pinned_commit = resolve_commit(license_repository, license_ref, commit_cache)
+        source_path = str(item.get("source_path") or item["path"])
+        url = raw_url(license_repository, pinned_commit, source_path)
+        if license_cache is not None and url in license_cache:
+            payload = license_cache[url]
+        else:
+            log(f"pinning license {identifier}/{item['path']} at {pinned_commit}")
+            payload = download_raw(url)
+            if license_cache is not None:
+                license_cache[url] = payload
+        entry = {
+            "path": item["path"],
+            "license": item.get("license"),
+            "repository": license_repository,
+            "commit": pinned_commit,
+            "source_path": source_path,
+            "url": url,
+            "sha256": sha256_bytes(payload),
+            "size": len(payload),
+        }
+        scope = license_scope_for(license_info, item.get("license"))
+        if scope:
+            entry["scope"] = scope
+        license_files.append(entry)
+    return license_files
+
+
+def resolve_raw_component(
+    component: dict[str, Any],
+    *,
+    commit_cache: dict[tuple[str, str], str] | None = None,
+    license_cache: dict[str, bytes] | None = None,
+) -> dict[str, Any]:
+    """Resolve shader-style raw files pinned by one repository commit.
+
+    The manifest already carries each file's SHA-256.  Resolving downloads the
+    immutable raw URL through the commit (never a branch) and fails closed if
+    the content does not match, so a moved tag cannot silently change a build.
+    """
+    identifier = component["id"]
+    repository = str(component["upstream"])
+    ref = str(component["ref"])
+    commit = resolve_commit(repository, ref, commit_cache)
+    context: dict[str, Any] = {
+        "repository": repository,
+        "ref": ref,
+        "commit": commit,
+        "version": component.get("version", ""),
+    }
+    version = render(component.get("version", ""), context) or ref
+
+    files = []
+    for item in component.get("files", []):
+        source = str(item["source"])
+        target = str(item["target"])
+        expected = str(item["sha256"]).lower()
+        url = raw_url(repository, commit, source)
+        log(f"pinning raw file {identifier}/{target} at {commit}")
+        payload = download_raw(url, limit=8 * 1024 * 1024)
+        actual = sha256_bytes(payload)
+        if actual != expected:
+            fail(
+                f"{identifier}: raw file {source} sha256 mismatch: "
+                f"expected {expected}, got {actual}"
+            )
+        files.append(
+            {
+                "source": source,
+                "target": target,
+                "license": item.get("license"),
+                "url": url,
+                "sha256": actual,
+                "size": len(payload),
+            }
+        )
+
+    license_info = component["license"]
+    license_files = resolve_license_files(
+        license_info,
+        context,
+        identifier=identifier,
+        commit_cache=commit_cache,
+        license_cache=license_cache,
+    )
+    locked = {
+        "id": identifier,
+        "kind": "raw-files",
+        "platforms": component.get("platforms", "all"),
+        "upstream": repository,
+        "ref": ref,
+        "version": version,
+        "commit": commit,
+        "files": files,
+        "license": {
+            "spdx": license_info.get("spdx"),
+            "files": license_files,
+            **scoped_license_fields(license_info),
+        },
+    }
+    log(f"resolved {identifier}: {version} <- {repository}@{commit} ({len(files)} files)")
+    return locked
+
+
 def resolve_component(
     component: dict[str, Any],
     *,
     commit_cache: dict[tuple[str, str], str] | None = None,
     license_cache: dict[str, bytes] | None = None,
 ) -> dict[str, Any]:
+    if component.get("kind") == "raw-files":
+        return resolve_raw_component(
+            component,
+            commit_cache=commit_cache,
+            license_cache=license_cache,
+        )
     identifier = component["id"]
     repository = component["upstream"]
     release_config = component.get("release") or {}
@@ -217,34 +338,13 @@ def resolve_component(
         )
 
     license_info = component["license"]
-    license_files = []
-    for item in license_info.get("files", []):
-        license_repository = str(item["repository"])
-        license_ref = render(item["ref"], context)
-        pinned_commit = resolve_commit(license_repository, license_ref, commit_cache)
-        source_path = str(item.get("source_path") or item["path"])
-        url = raw_url(license_repository, pinned_commit, source_path)
-        if license_cache is not None and url in license_cache:
-            payload = license_cache[url]
-        else:
-            log(f"pinning license {identifier}/{item['path']} at {pinned_commit}")
-            payload = download_raw(url)
-            if license_cache is not None:
-                license_cache[url] = payload
-        entry = {
-            "path": item["path"],
-            "license": item.get("license"),
-            "repository": license_repository,
-            "commit": pinned_commit,
-            "source_path": source_path,
-            "url": url,
-            "sha256": sha256_bytes(payload),
-            "size": len(payload),
-        }
-        scope = license_scope_for(license_info, item.get("license"))
-        if scope:
-            entry["scope"] = scope
-        license_files.append(entry)
+    license_files = resolve_license_files(
+        license_info,
+        context,
+        identifier=identifier,
+        commit_cache=commit_cache,
+        license_cache=license_cache,
+    )
 
     digest = asset.get("digest")
     sha256 = None
@@ -329,7 +429,7 @@ def lock_hash(lock: dict[str, Any]) -> str:
 def component_summary(lock: dict[str, Any]) -> dict[str, Any]:
     summary: dict[str, Any] = {}
     for identifier, component in sorted(lock.get("components", {}).items()):
-        summary[identifier] = {
+        entry = {
             "version": component.get("version"),
             "commit": component.get("commit"),
             "upstream": component.get("upstream"),
@@ -339,4 +439,11 @@ def component_summary(lock: dict[str, Any]) -> dict[str, Any]:
             "sha256": component.get("sha256"),
             "license": (component.get("license") or {}).get("spdx"),
         }
+        if component.get("kind") == "raw-files":
+            entry["kind"] = "raw-files"
+            entry["files"] = [
+                {"path": item.get("target"), "sha256": item.get("sha256")}
+                for item in component.get("files", [])
+            ]
+        summary[identifier] = entry
     return summary

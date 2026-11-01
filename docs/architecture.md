@@ -121,10 +121,11 @@ patch 后最后写入的快照，二者用于捕获用户直接编辑和校验�
 - 资产由 `sources.lock.json` 固定版本与哈希；下载后再次校验。许可证文本同样固定
   到完整 commit 与 SHA-256，下载后校验。
 - 压缩包内时间戳、属主、权限被归一化；tar.gz 的 gzip 头 `mtime=0`。
-- `manifest.json` 记录每个组件的上游版本、完整 commit（mpv 必有）、资产名和
-  SHA-256，以及每个许可证文本的 SHA-256；`platforms.<platform>` 另记录该平台
-  实际使用的 `mpv_version` / `mpv_commit`。还记录配置、脚本、构建代码、安装器
-  和随包许可证文档的 `inputs_hash` 与 `sources.lock.json` 的内容哈希。
+- `manifest.json` 记录每个组件的上游版本、完整 commit（mpv 和 raw 文件必有）、
+  资产名或 shader 文件清单、文件 SHA-256 以及许可证信息；
+  `platforms.<platform>` 另记录该平台实际使用的 `mpv_version` / `mpv_commit`。
+  还记录配置、脚本、构建代码、安装器和随包许可证文档的 `inputs_hash` 与
+  `sources.lock.json` 的内容哈希。
 - 压缩包内时间戳、属主、权限被归一化，因此归档条目本身不随构建时间变化。
 - `playkit-version.json` / `manifest.json` 中的 `built_at` 默认取当前 UTC 时间，
   会随每次构建变化；需要可复现的字节级产物时，设置 `SOURCE_DATE_EPOCH` 或向
@@ -270,11 +271,13 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 
 `build.verify` 与 `build.assemble` 会在发布前检查：
 
-1. 必需文件存在（两个平台的播放器、配置、脚本、字体、manifest、许可证索引、
-   `playkit-inventory.json`、`.playkit/state.json`、helper、umpv、`umpv.conf`、
-   Windows umpv 注册脚本与模式启动器）。
-2. 禁用路径不存在：基线目录、shader、VapourSynth、历史 `thumb_engine`、模型、
-   AppImage 自更新/yt-dlp 下载 hook、运行时缓存和状态文件。
+1. 必需文件存在（两个平台的播放器、配置、脚本、字体、`manifests/shaders.yml`
+   声明的 GLSL 目标、manifest、许可证索引、`playkit-inventory.json`、
+   `.playkit/state.json`、helper、umpv、`umpv.conf`、Windows umpv 注册脚本与
+   模式启动器）。
+2. 禁用路径不存在：基线目录、VapourSynth、历史 `thumb_engine`、模型、
+   AppImage 自更新/yt-dlp 下载 hook、运行时缓存和状态文件；`.glsl` 只允许
+   `manifests/shaders.yml` 列出的精确目标。
 3. `mpv.conf` 中 `~~/` 引用存在。
 4. `update-check.lua` 的 `enabled=no` 门禁位于任何 subprocess 调用之前。
 5. 更新器元数据：`protocol=1`、`patch_schema=1`（兼容旧 helper 的桥接版本；

@@ -21,6 +21,24 @@ from .upstream import GitHubNotFound, download_asset_bytes, github_json, list_re
 from .version import next_release_version, tag_for_version
 
 
+def _component_files(component: dict[str, Any]) -> list[dict[str, Any]] | None:
+    files = component.get("files")
+    if not isinstance(files, list):
+        return None
+    normalized = []
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        normalized.append(
+            {
+                "path": item.get("target") or item.get("path"),
+                "sha256": item.get("sha256"),
+                "license": item.get("license"),
+            }
+        )
+    return sorted(normalized, key=lambda entry: str(entry.get("path")))
+
+
 def _manifest_component_fields(component: dict[str, Any]) -> dict[str, Any]:
     """Fields written into the package and release manifests.
 
@@ -41,7 +59,7 @@ def _manifest_component_fields(component: dict[str, Any]) -> dict[str, Any]:
         license_scope = component.get("license_scope")
         license_parts = component.get("license_parts")
         license_files = component.get("license_files")
-    return {
+    result = {
         "version": component.get("version"),
         # Windows and Linux mpv builds can use different commits; the commit is
         # part of the published manifest and therefore part of this comparison.
@@ -58,6 +76,11 @@ def _manifest_component_fields(component: dict[str, Any]) -> dict[str, Any]:
         # with identical text must not force a new release.
         "license_files": license_files_summary(license_files),
     }
+    files = _component_files(component)
+    if files is not None:
+        result["kind"] = "raw-files"
+        result["files"] = files
+    return result
 
 
 def compact_components(lock: dict[str, Any]) -> dict[str, Any]:

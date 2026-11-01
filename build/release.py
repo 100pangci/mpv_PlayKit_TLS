@@ -38,6 +38,22 @@ def checksum_lines(out_dir: Path) -> list[str]:
     return lines
 
 
+def _raw_files(component: dict[str, Any]) -> list[dict[str, Any]]:
+    files = component.get("files") or []
+    return sorted(
+        (
+            {
+                "path": item.get("target") or item.get("path"),
+                "sha256": item.get("sha256"),
+                "license": item.get("license"),
+            }
+            for item in files
+            if isinstance(item, dict)
+        ),
+        key=lambda entry: str(entry.get("path")),
+    )
+
+
 def mpv_for_platform(lock: dict[str, Any], platform: str) -> dict[str, Any]:
     """Return the exact mpv version/commit a platform package was built from."""
     matches = [
@@ -170,22 +186,38 @@ def main(argv: list[str] | None = None) -> int:
 
     components: dict[str, Any] = {}
     for identifier, locked in sorted(lock.get("components", {}).items()):
-        components[identifier] = {
-            "version": locked.get("version"),
-            "commit": locked.get("commit"),
-            "upstream": locked.get("upstream"),
-            "release_tag": locked.get("release_tag"),
-            "release_url": locked.get("release_url"),
-            "asset_name": locked.get("asset_name"),
-            "sha256": locked.get("sha256"),
-            **manifest_license_fields(locked.get("license")),
-        }
+        if locked.get("kind") == "raw-files":
+            components[identifier] = {
+                "version": locked.get("version"),
+                "commit": locked.get("commit"),
+                "upstream": locked.get("upstream"),
+                "kind": "raw-files",
+                "files": _raw_files(locked),
+                **manifest_license_fields(locked.get("license")),
+            }
+        else:
+            components[identifier] = {
+                "version": locked.get("version"),
+                "commit": locked.get("commit"),
+                "upstream": locked.get("upstream"),
+                "release_tag": locked.get("release_tag"),
+                "release_url": locked.get("release_url"),
+                "asset_name": locked.get("asset_name"),
+                "sha256": locked.get("sha256"),
+                **manifest_license_fields(locked.get("license")),
+            }
         for platform, manifest in embedded.items():
             packaged = (manifest.get("components") or {}).get(identifier)
             if packaged and packaged.get("sha256") != locked.get("sha256"):
                 fail(f"{identifier}: packaged hash differs from lock on {platform}")
             if packaged and packaged.get("commit") != locked.get("commit"):
                 fail(f"{identifier}: packaged commit differs from lock on {platform}")
+            if locked.get("kind") == "raw-files":
+                # The packaged manifest keeps extra provenance fields (size,
+                # source_url); compare the identity fields that both sides
+                # record, not the whole entry dict.
+                if packaged and _raw_files(packaged) != _raw_files(locked):
+                    fail(f"{identifier}: packaged shader files differ from lock on {platform}")
 
     manifest = {
         "schema": 2,

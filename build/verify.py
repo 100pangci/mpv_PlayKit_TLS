@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .common import PLATFORM_ARCHIVE, PLATFORM_OS, fail, log, read_json, sha256_file
 from .extract import DEFAULT_REMOVED_HOOKS, hook_is_removed
+from .shaders import shader_targets
 from .userstate import verify_package_state
 
 REQUIRED = [
@@ -86,6 +87,12 @@ REQUIRED_LICENSES = {
         "licenses/uosc/MPL-2.0.txt",
         "licenses/yt-dlp-windows/LICENSE",
         "licenses/yt-dlp-windows/THIRD_PARTY_LICENSES.txt",
+        "licenses/anime4k-restore/LICENSE",
+        "licenses/anime4k-upscale-gan/LICENSE",
+        "licenses/fsrcnnx/LGPL-3.0-or-later.txt",
+        "licenses/nnedi3/LGPL-3.0-or-later.txt",
+        "licenses/k7-modernanime/MIT.txt",
+        "licenses/adaptive-sharpen-lite/BSD-2-Clause.txt",
     ],
     "linux-x64": [
         "licenses/lxgw-wenkai-mono-lite/OFL.txt",
@@ -98,12 +105,17 @@ REQUIRED_LICENSES = {
         "licenses/uosc/MPL-2.0.txt",
         "licenses/yt-dlp-linux/LICENSE",
         "licenses/yt-dlp-linux/THIRD_PARTY_LICENSES.txt",
+        "licenses/anime4k-restore/LICENSE",
+        "licenses/anime4k-upscale-gan/LICENSE",
+        "licenses/fsrcnnx/LGPL-3.0-or-later.txt",
+        "licenses/nnedi3/LGPL-3.0-or-later.txt",
+        "licenses/k7-modernanime/MIT.txt",
+        "licenses/adaptive-sharpen-lite/BSD-2-Clause.txt",
     ],
 }
 
 FORBIDDEN_PARTS = {
     "baseline",
-    "shaders",
     "vs",
     "thumb_engine",
     "mpv-lazy",
@@ -113,18 +125,43 @@ FORBIDDEN_PARTS = {
     "update-status.json",
     "updater.log",
 }
-FORBIDDEN_SUFFIXES = {".vpy", ".onnx", ".glsl"}
+FORBIDDEN_SUFFIXES = {".vpy", ".onnx"}
 FORBIDDEN_PARTS_FOLDED = frozenset(part.casefold() for part in FORBIDDEN_PARTS)
 
 
-def check_forbidden(path: str) -> None:
+def _declared_shader(path: str, allowed: set[str]) -> bool:
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return any(
+        normalized == target or normalized.endswith("/" + target)
+        for target in allowed
+    )
+
+
+def check_forbidden(
+    path: str, allowed_shaders: set[str] | None = None, *, is_dir: bool = False
+) -> None:
+    allowed = set(shader_targets()) if allowed_shaders is None else allowed_shaders
     parts = Path(path).parts
     for part in parts:
         if part.casefold() in FORBIDDEN_PARTS_FOLDED:
             fail(f"forbidden path in package: {path}")
     suffix = Path(path).suffix.lower()
-    if suffix in FORBIDDEN_SUFFIXES:
+    if suffix == ".glsl":
+        # Shader assets are allowed only at the exact targets declared in
+        # manifests/shaders.yml.  A random .glsl file, a VapourSynth script or a
+        # model is still rejected.
+        if not _declared_shader(path, allowed):
+            fail(f"undeclared shader file in package: {path}")
+    elif suffix in FORBIDDEN_SUFFIXES:
         fail(f"forbidden file type in package: {path}")
+    if (
+        not is_dir
+        and any(part.casefold() == "shaders" for part in parts)
+        and suffix != ".glsl"
+    ):
+        fail(f"non-shader file in shader directory: {path}")
     if suffix == ".hook" and hook_is_removed(Path(path).name, DEFAULT_REMOVED_HOOKS):
         fail(f"runtime self-update/download hook in package: {path}")
 
@@ -297,11 +334,17 @@ def check_stage(stage: Path, platform: str, version: str | None) -> None:
     else:
         fail(f"unknown platform: {platform}")
 
+    allowed_shaders = set(shader_targets())
+    required.extend(sorted(allowed_shaders))
     for relative in required:
         if not (stage / relative).exists():
             fail(f"missing required file: {relative}")
     for path in stage.rglob("*"):
-        check_forbidden(str(path.relative_to(stage)).replace("\\", "/"))
+        check_forbidden(
+            str(path.relative_to(stage)).replace("\\", "/"),
+            allowed_shaders,
+            is_dir=path.is_dir(),
+        )
 
     portable = stage / "portable_config"
     for config_name in ("mpv.conf",):
@@ -395,12 +438,21 @@ def list_archive(asset: Path, expected_top: str) -> list[str]:
                     check_archive_symlink(member.name, member.linkname, expected_top)
                 elif member.islnk():
                     check_archive_hardlink(member.name, member.linkname, expected_top)
-            return [member.name for member in members]
+            # tarfile stores directory names without the trailing slash that
+            # zip uses.  Normalize them so callers can distinguish directories
+            # from files by the same rule for both formats.
+            return [
+                member.name + "/"
+                if member.isdir() and not member.name.endswith("/")
+                else member.name
+                for member in members
+            ]
     fail(f"unsupported archive: {asset}")
 
 
 def check_archive(asset: Path, version: str, platform: str) -> None:
     expected_top = f"mpv-PlayKit-{version}-{platform}"
+    allowed_shaders = set(shader_targets())
     names = list_archive(asset, expected_top)
     if not names:
         fail(f"archive is empty: {asset}")
@@ -410,10 +462,11 @@ def check_archive(asset: Path, version: str, platform: str) -> None:
             fail(f"archive member outside expected top folder {expected_top}: {name}")
         if pure.startswith("/") or ".." in Path(pure).parts:
             fail(f"unsafe archive member: {name}")
-        check_forbidden(pure)
+        check_forbidden(pure, allowed_shaders, is_dir=name.endswith("/"))
     relative = [name[len(expected_top) + 1 :] for name in names if name.startswith(expected_top + "/")]
     required = list(REQUIRED)
     required.extend(WINDOWS_REQUIRED if platform == "windows-x64" else LINUX_REQUIRED)
+    required.extend(sorted(allowed_shaders))
     for item in required:
         if item not in relative and item + "/" not in relative:
             fail(f"archive missing required member: {item}")

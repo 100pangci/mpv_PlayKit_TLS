@@ -38,6 +38,7 @@ from .helper import (
 )
 from .inputs import compute_inputs_hash
 from .patch_uosc import patch_uosc
+from .shaders import shader_targets
 from .userstate import write_inventory, write_package_state
 
 LAUNCHER = """#!/bin/sh
@@ -83,7 +84,8 @@ portable_config/ 内是完整配置。本项目原创部分按 GPL-3.0-or-later 
 或删除 portable_config/update-check-state.json 后使用“关闭更新检查”菜单项。
 关闭后不会发起任何联网请求，也不会启动更新器。
 
-本发行包不包含 GLSL shader、VapourSynth、AI 模型或 CUDA/TensorRT 组件。
+本发行包包含少量在构建时从上游下载并校验的 GLSL 着色器，位于
+portable_config/shaders/。VapourSynth、AI 模型与 CUDA/TensorRT 组件不随包提供。
 """
 
 
@@ -149,6 +151,37 @@ def install_component(
         for relative in allowed:
             if not (stage / "portable_config" / relative).is_file():
                 fail(f"{component['id']}: expected platform helper missing: {relative}")
+
+
+def install_raw_component(
+    stage: Path,
+    component: dict[str, Any],
+    fetched: dict[str, Any],
+    work: Path,
+) -> None:
+    """Install manifest-declared raw files (GLSL shaders) into their targets."""
+    identifier = component["id"]
+    declared = {
+        str(item.get("target")): str(item.get("sha256"))
+        for item in component.get("files", [])
+    }
+    fetched_files = {
+        str(item.get("target")): str(item.get("sha256"))
+        for item in fetched.get("files", [])
+    }
+    if fetched_files != declared:
+        fail(f"{identifier}: fetched raw files differ from manifest")
+    for item in fetched.get("files", []):
+        target = stage / item["target"]
+        if not str(item["target"]).startswith("portable_config/shaders/"):
+            fail(f"{identifier}: raw target escapes the shader directory: {item['target']}")
+        source = work / item["local_path"]
+        if not source.is_file():
+            fail(f"{identifier}: fetched raw file is missing: {source}")
+        if sha256_file(source) != item.get("sha256"):
+            fail(f"{identifier}: fetched raw file hash changed: {item['target']}")
+        copy_file(source, target)
+        log(f"installed {identifier}: {item['target']}")
 
 
 def copy_configuration(stage: Path, platform: str) -> None:
@@ -267,6 +300,35 @@ def write_metadata(
     components: dict[str, Any] = {}
     for identifier, entry in sorted(fetched.items()):
         locked = lock["components"][identifier]
+        if locked.get("kind") == "raw-files":
+            expected_files = {
+                str(item.get("target")): str(item.get("sha256"))
+                for item in locked.get("files", [])
+            }
+            fetched_files = {
+                str(item.get("target")): str(item.get("sha256"))
+                for item in entry.get("files", [])
+            }
+            if fetched_files != expected_files:
+                fail(f"{identifier}: fetched raw files differ from lock")
+            components[identifier] = {
+                "version": locked.get("version"),
+                "commit": locked.get("commit"),
+                "upstream": locked.get("upstream"),
+                "kind": "raw-files",
+                "files": [
+                    {
+                        "path": item.get("target"),
+                        "sha256": item.get("sha256"),
+                        "size": item.get("size"),
+                        "license": item.get("license"),
+                        "source_url": item.get("url"),
+                    }
+                    for item in entry.get("files", [])
+                ],
+                **manifest_license_fields(locked.get("license")),
+            }
+            continue
         if locked.get("sha256") and entry.get("sha256") != locked.get("sha256"):
             fail(f"{identifier}: fetched hash differs from lock")
         components[identifier] = {
@@ -416,6 +478,7 @@ def verify_stage_minimum(stage: Path, platform: str) -> None:
         )
     else:
         fail(f"unknown platform: {platform}")
+    required.extend(stage / target for target in shader_targets())
     for path in required:
         if not path.exists():
             fail(f"missing required path in stage: {path}")
@@ -498,6 +561,9 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if identifier not in fetched:
             fail(f"{identifier}: not fetched for {args.platform}")
+        if component.get("kind") == "raw-files":
+            install_raw_component(stage, component, fetched[identifier], work)
+            continue
         source_root, _ = component_source(
             component, lock["components"][identifier], fetched[identifier], work, args.platform
         )

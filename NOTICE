@@ -22,7 +22,18 @@ fetched at build time and remain under their own upstream licenses:
   LXGW WenKai Mono Lite        OFL-1.1
   Material Icons               Apache-2.0
   yt-dlp                       Unlicense
+  Anime4K Restore / GAN        MIT
+  FSRCNNX                      LGPL-3.0-or-later (declared in the shader file)
+  NNEDI3                       LGPL-3.0-or-later
+  k7 modernAnime               MIT (declared in the shader file)
+  Adaptive sharpen lite        BSD-2-Clause (declared in the shader file)
   d3dcompiler_43.dll           Microsoft DirectX redistributable
+
+The GLSL shaders are data assets, not project code.  They are fetched at build
+time from the repositories and commits recorded in sources.lock.json,
+installed under portable_config/shaders/, and their license texts are included
+in licenses/.  Ani4Kv2/AniSD (CC BY-NC 4.0 model weights) and QCOM (unclear
+provenance) are deliberately excluded.
 
 The idle badge design in scripts/local/idle-brand.lua follows the mpv OSC idle
 logo from mpv's player/lua/osc.lua (mpv is GPL-2.0-or-later / LGPL-2.1-or-later).

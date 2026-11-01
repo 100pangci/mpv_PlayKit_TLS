@@ -17,6 +17,7 @@ use std::process::{Command, ExitCode, Stdio};
 use std::time::Duration;
 
 const CONFIG_NAME: &str = "umpv.conf";
+#[cfg(windows)]
 const DEFAULT_WINDOWS_PIPE: &str = r"\\.\pipe\umpv";
 const DEFAULT_FLAG: LoadFlag = LoadFlag::Replace;
 

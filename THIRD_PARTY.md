@@ -13,6 +13,12 @@
 | fzy (Lua) | [swarn/fzy-lua](https://github.com/swarn/fzy-lua) | uosc 菜单模糊匹配 | MIT | `portable_config/scripts/uosc/lib/fzy.lua` |
 | thumbfast FFI 片段 | [po5/thumbfast](https://github.com/po5/thumbfast) | uosc 缩略图 FFI 声明 | MPL-2.0 | `portable_config/scripts/uosc/lib/utils.lua` |
 | LXGW WenKai Mono Lite | [lxgw/LxgwWenKai-Lite](https://github.com/lxgw/LxgwWenKai-Lite) | 中文字幕字体 | OFL-1.1 | `portable_config/fonts/LXGWWenKaiMonoLite-Regular.ttf` |
+| Anime4K Restore | [bloc97/Anime4K](https://github.com/bloc97/Anime4K) | GLSL 重建着色器 | MIT | `portable_config/shaders/Anime4K/Anime4K_Restore_CNN_L.glsl` |
+| Anime4K Upscale GAN | [bloc97/Anime4K](https://github.com/bloc97/Anime4K) | GLSL GAN 放大着色器 | MIT | `portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x2_M.glsl` |
+| FSRCNNX | [igv/FSRCNN-TensorFlow](https://github.com/igv/FSRCNN-TensorFlow) | GLSL 亮度放大着色器 | LGPL-3.0-or-later（文件内声明） | `portable_config/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl` |
+| NNEDI3 | [bjin/mpv-prescalers](https://github.com/bjin/mpv-prescalers) | GLSL 边缘方向插值着色器 | LGPL-3.0-or-later | `portable_config/shaders/EDI/nnedi3_nns64_win8x4.glsl` |
+| k7 modernAnime | [hooke007/mpv_PlayKit](https://github.com/hooke007/mpv_PlayKit) | GLSL 动画放大着色器（FHD/DT） | MIT（文件内声明） | `portable_config/shaders/ESRGAN/k7_modernAnime_*.glsl` |
+| Adaptive sharpen lite | [hooke007/mpv_PlayKit](https://github.com/hooke007/mpv_PlayKit) | GLSL 自适应锐化 | BSD-2-Clause（文件内声明，原作者 bacondither） | `portable_config/shaders/Adaptive_sharpen/` |
 
 `d3dcompiler_43.dll` 是 Microsoft DirectX 的可再分发组件，不是 mpv 或本项目的
 GPL 代码；它由 shinchiro 的 Windows 构建附带，按 Microsoft 的 DirectX
@@ -48,7 +54,18 @@ licenses/
   yt-dlp-windows/THIRD_PARTY_LICENSES.txt
   yt-dlp-linux/LICENSE                    # Linux 包
   yt-dlp-linux/THIRD_PARTY_LICENSES.txt
+  anime4k-restore/LICENSE                 # MIT
+  anime4k-upscale-gan/LICENSE             # MIT
+  fsrcnnx/LGPL-3.0-or-later.txt
+  nnedi3/LGPL-3.0-or-later.txt
+  k7-modernanime/MIT.txt
+  adaptive-sharpen-lite/BSD-2-Clause.txt
 ```
+
+着色器不进入仓库：`manifests/shaders.yml` 只记录上游仓库、固定提交、文件路径和
+SHA-256；`build.resolve` 解析许可证，`build.fetch` 在 CI 下载，`build.assemble`
+安装到 `portable_config/shaders/`。Ani4Kv2/AniSD 的模型权重为 CC BY-NC 4.0，
+QCOM 的来源和许可证无法确认，因此都没有列入组件表。
 
 具体文件名以 `licenses/INDEX.json` 为准。`INDEX.json` 的 `license` 字段是**逐文件
 SPDX**（例如 `LICENSE.LGPL` 标为 `LGPL-2.1-or-later`，`LICENSE.GPL` 标为

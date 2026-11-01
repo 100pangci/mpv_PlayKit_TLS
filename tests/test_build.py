@@ -28,6 +28,15 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("mpv-linux", components)
         self.assertIn("uosc", components)
         self.assertIn("lxgw-wenkai-mono-lite", components)
+        for identifier in (
+            "anime4k-restore",
+            "anime4k-upscale-gan",
+            "fsrcnnx",
+            "nnedi3",
+            "k7-modernanime",
+            "adaptive-sharpen-lite",
+        ):
+            self.assertIn(identifier, components)
 
     def test_license_files_have_spdx(self) -> None:
         _, components = load_manifests()
@@ -45,6 +54,12 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(labels[("mpv-linux", "LICENSE.GPL")], "GPL-2.0-or-later")
         self.assertEqual(labels[("mpv-linux", "LICENSE.LGPL")], "LGPL-2.1-or-later")
         self.assertEqual(labels[("yt-dlp-windows", "THIRD_PARTY_LICENSES.txt")], "NOASSERTION")
+        self.assertEqual(labels[("anime4k-restore", "LICENSE")], "MIT")
+        self.assertEqual(labels[("anime4k-upscale-gan", "LICENSE")], "MIT")
+        self.assertEqual(labels[("k7-modernanime", "MIT.txt")], "MIT")
+        self.assertEqual(labels[("adaptive-sharpen-lite", "BSD-2-Clause.txt")], "BSD-2-Clause")
+        self.assertEqual(labels[("nnedi3", "LGPL-3.0-or-later.txt")], "LGPL-3.0-or-later")
+        self.assertEqual(labels[("fsrcnnx", "LGPL-3.0-or-later.txt")], "LGPL-3.0-or-later")
 
     def test_multi_license_components_use_scoped_parts(self) -> None:
         _, components = load_manifests()
@@ -114,6 +129,34 @@ class ManifestTests(unittest.TestCase):
             }}
             rendered = render(component["asset"]["version"], context)
             self.assertTrue(rendered, identifier)
+
+    def test_shader_manifest_is_pinned_and_declares_targets(self) -> None:
+        from build.shaders import shader_targets
+
+        _, components = load_manifests()
+        targets = shader_targets()
+        self.assertEqual(len(targets), 7)
+        self.assertTrue(all(target.startswith("portable_config/shaders/") for target in targets))
+        self.assertTrue(all(target.endswith(".glsl") for target in targets))
+        for identifier in (
+            "anime4k-restore",
+            "anime4k-upscale-gan",
+            "nnedi3",
+            "k7-modernanime",
+            "adaptive-sharpen-lite",
+        ):
+            component = components[identifier]
+            self.assertEqual(component["kind"], "raw-files")
+            self.assertRegex(component["ref"], r"^[0-9a-f]{40}$|^v4\.0\.1$")
+            for item in component["files"]:
+                self.assertRegex(item["sha256"], r"^[0-9a-f]{64}$")
+                self.assertIn(item["target"], targets)
+                self.assertIn(item["license"], {"MIT", "BSD-2-Clause", "LGPL-3.0-or-later"})
+        self.assertEqual(components["fsrcnnx"]["kind"], "file")
+        self.assertIn(
+            "portable_config/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl",
+            targets,
+        )
 
     def test_mpv_linux_stable_asset(self) -> None:
         _, components = load_manifests()
@@ -709,6 +752,22 @@ class ScriptContentTests(unittest.TestCase):
         self.assertIn("chapter_keywords", options)
         self.assertEqual(options.get("speed_target"), "3")
 
+    def test_shader_menu_and_bindings_cover_declared_targets(self) -> None:
+        from build.shaders import shader_targets
+
+        menu = (ROOT / "config" / "common" / "menu.conf").read_text(encoding="utf-8")
+        bindings = (ROOT / "config" / "common" / "input.conf").read_text(encoding="utf-8")
+        targets = shader_targets()
+        self.assertTrue(targets)
+        for target in targets:
+            self.assertIn(f'"~~/{target.removeprefix("portable_config/")}"', menu)
+            self.assertIn(f'"~~/{target.removeprefix("portable_config/")}"', bindings)
+        self.assertIn('change-list glsl-shaders clr ""', menu)
+        self.assertIn("Ctrl+`", bindings)
+        for excluded in ("QCOM", "Ani4Kv2", "AniSD"):
+            self.assertNotIn(excluded, menu)
+            self.assertNotIn(excluded, bindings)
+
     def test_thumbfast_options_and_cache_guards(self) -> None:
         options = self._options("thumbfast.conf")
         self.assertEqual(options.get("thumbnail_hwdec"), "no")
@@ -778,10 +837,28 @@ class ForbiddenContentTests(unittest.TestCase):
             "a/b.GLSL",
             "a/b.VPY",
             "a/b.ONNX",
+            "portable_config/shaders/undeclared.glsl",
         ):
             with self.assertRaises(BuildError, msg=path):
                 check_forbidden(path)
         check_forbidden("portable_config/scripts/uosc/main.lua")
+        check_forbidden("portable_config/shaders", is_dir=True)
+        check_forbidden("portable_config/shaders/Anime4K", is_dir=True)
+        with self.assertRaises(BuildError):
+            check_forbidden("portable_config/shaders/x.txt")
+
+    def test_declared_shaders_are_allowed(self) -> None:
+        from build.common import BuildError
+        from build.shaders import shader_targets
+        from build.verify import check_forbidden
+
+        targets = shader_targets()
+        self.assertTrue(targets)
+        for target in targets:
+            check_forbidden(target)
+            check_forbidden(f"mpv-PlayKit-2026.11-windows-x64/{target}")
+        with self.assertRaises(BuildError):
+            check_forbidden("portable_config/shaders/not-in-manifest.glsl")
 
 
 class ZipSafetyTests(unittest.TestCase):
@@ -825,6 +902,30 @@ class ArchiveLinkTests(unittest.TestCase):
             root = Path(temporary)
             asset = self._tar_with_link(root, "../lib/x")
             self.assertEqual(list_archive(asset, "top"), ["top/bin/link"])
+
+    def test_tar_directories_get_a_trailing_slash(self) -> None:
+        from build.verify import list_archive
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            asset = root / "dirs.tar.gz"
+            with tarfile.open(asset, "w:gz") as archive:
+                for name in ("top", "top/portable_config/shaders"):
+                    info = tarfile.TarInfo(name)
+                    info.type = tarfile.DIRTYPE
+                    info.mode = 0o755
+                    archive.addfile(info)
+                info = tarfile.TarInfo("top/portable_config/shaders/demo.glsl")
+                info.size = 1
+                archive.addfile(info, io.BytesIO(b"x"))
+            self.assertEqual(
+                list_archive(asset, "top"),
+                [
+                    "top/",
+                    "top/portable_config/shaders/",
+                    "top/portable_config/shaders/demo.glsl",
+                ],
+            )
 
     def test_package_link_target(self) -> None:
         from build.package import safe_link_target
@@ -980,6 +1081,125 @@ class LicensePinningTests(unittest.TestCase):
         )
         self.assertNotIn("/main/", url)
         self.assertNotIn("/master/", url)
+
+    def _raw_component(self, shader: bytes) -> dict:
+        return {
+            "id": "demo-shader",
+            "kind": "raw-files",
+            "platforms": "all",
+            "upstream": "owner/repo",
+            "ref": "v1",
+            "version": "v1",
+            "files": [
+                {
+                    "source": "shaders/demo.glsl",
+                    "target": "portable_config/shaders/Demo/demo.glsl",
+                    "sha256": hashlib.sha256(shader).hexdigest(),
+                    "license": "MIT",
+                }
+            ],
+            "license": {
+                "spdx": "MIT",
+                "files": [
+                    {
+                        "path": "MIT.txt",
+                        "license": "MIT",
+                        "repository": "spdx/license-list-data",
+                        "ref": "v1",
+                        "source_path": "text/MIT.txt",
+                    }
+                ],
+            },
+        }
+
+    def test_raw_component_resolver_pins_files(self) -> None:
+        from unittest import mock
+
+        from build.upstream import resolve_component
+
+        shader = b"//!HOOK MAIN\n//!BIND HOOKED\n"
+        license_text = b"MIT license text\n"
+
+        def fake_download(url: str, **kwargs) -> bytes:
+            return license_text if url.endswith("MIT.txt") else shader
+
+        with mock.patch("build.upstream.resolve_commit", return_value="c" * 40), \
+                mock.patch("build.upstream.download_raw", side_effect=fake_download):
+            locked = resolve_component(self._raw_component(shader))
+
+        self.assertEqual(locked["kind"], "raw-files")
+        self.assertEqual(locked["commit"], "c" * 40)
+        self.assertEqual(locked["files"][0]["target"], "portable_config/shaders/Demo/demo.glsl")
+        self.assertEqual(locked["files"][0]["sha256"], hashlib.sha256(shader).hexdigest())
+        self.assertIn(f"/{'c' * 40}/shaders/demo.glsl", locked["files"][0]["url"])
+        self.assertEqual(
+            locked["license"]["files"][0]["sha256"],
+            hashlib.sha256(license_text).hexdigest(),
+        )
+
+    def test_raw_component_hash_mismatch_fails_closed(self) -> None:
+        from unittest import mock
+
+        from build.common import BuildError
+        from build.upstream import resolve_component
+
+        component = self._raw_component(b"expected shader\n")
+
+        def fake_download(url: str, **kwargs) -> bytes:
+            return b"MIT license text\n" if url.endswith("MIT.txt") else b"changed shader\n"
+
+        with mock.patch("build.upstream.resolve_commit", return_value="c" * 40), \
+                mock.patch("build.upstream.download_raw", side_effect=fake_download):
+            with self.assertRaises(BuildError):
+                resolve_component(component)
+
+    def test_raw_fetch_verifies_and_records_paths(self) -> None:
+        from unittest import mock
+
+        from build.fetch import fetch_component
+
+        shader = b"//!HOOK MAIN\n"
+        license_text = b"MIT license text\n"
+        commit = "c" * 40
+        component = {
+            "id": "demo-shader",
+            "kind": "raw-files",
+            "version": "v1",
+            "commit": commit,
+            "files": [
+                {
+                    "source": "shaders/demo.glsl",
+                    "target": "portable_config/shaders/Demo/demo.glsl",
+                    "url": f"https://raw.githubusercontent.com/owner/repo/{commit}/shaders/demo.glsl",
+                    "sha256": hashlib.sha256(shader).hexdigest(),
+                }
+            ],
+            "license": {
+                "files": [
+                    {
+                        "path": "MIT.txt",
+                        "commit": commit,
+                        "url": f"https://raw.githubusercontent.com/spdx/license-list-data/{commit}/text/MIT.txt",
+                        "sha256": hashlib.sha256(license_text).hexdigest(),
+                    }
+                ]
+            },
+        }
+
+        def fake_download(url: str, destination: Path, **kwargs) -> tuple[str, int]:
+            payload = shader if url.endswith(".glsl") else license_text
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(payload)
+            return hashlib.sha256(payload).hexdigest(), len(payload)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            with mock.patch("build.fetch.download", side_effect=fake_download):
+                entry = fetch_component(component, work)
+            self.assertEqual(entry["kind"], "raw-files")
+            self.assertEqual(entry["files"][0]["sha256"], hashlib.sha256(shader).hexdigest())
+            self.assertTrue((work / entry["files"][0]["local_path"]).is_file())
+            self.assertTrue((work / entry["license_files"][0]["local_path"]).is_file())
 
     def test_committed_lock_licenses_are_pinned(self) -> None:
         lock = read_json(ROOT / "sources.lock.json")
@@ -1501,6 +1721,34 @@ class ReleaseManifestTests(unittest.TestCase):
             args = self._args(root, dist, **{"--expected-lock-sha256": "0" * 64})
             with self.assertRaises(BuildError):
                 release_main(args)
+
+    def test_packaged_shader_entries_compare_by_identity(self) -> None:
+        from build.release import _raw_files
+
+        locked = {
+            "files": [
+                {
+                    "source": "shaders/demo.glsl",
+                    "target": "portable_config/shaders/Demo/demo.glsl",
+                    "license": "MIT",
+                    "url": "https://example.invalid/demo.glsl",
+                    "sha256": "3" * 64,
+                    "size": 123,
+                }
+            ]
+        }
+        packaged = {
+            "files": [
+                {
+                    "path": "portable_config/shaders/Demo/demo.glsl",
+                    "license": "MIT",
+                    "sha256": "3" * 64,
+                    "size": 456,
+                    "source_url": "https://example.invalid/demo.glsl",
+                }
+            ]
+        }
+        self.assertEqual(_raw_files(packaged), _raw_files(locked))
 
 
 class WorkflowTests(unittest.TestCase):

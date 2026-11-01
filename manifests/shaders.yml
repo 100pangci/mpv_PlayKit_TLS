@@ -1,0 +1,147 @@
+schema: 1
+# GLSL shaders are data assets: nothing here is committed to the repository.
+# build.resolve pins every raw file to a full upstream commit and a SHA-256;
+# build.fetch downloads it from raw.githubusercontent.com during CI, and
+# build.assemble installs it under portable_config/shaders/.
+#
+# Excluded on purpose:
+#   - Ani4Kv2 / AniSD: code MIT but the model weights are CC BY-NC 4.0, which
+#     is incompatible with a freely redistributable package.
+#   - QCOM_SGEDS: the file's embedded notice points at a Snapdragon SGSR
+#     license, but the code is not that work and its provenance is unclear.
+#   - VapourSynth (.vpy) and AI model files are outside this distribution.
+components:
+  - id: anime4k-restore
+    kind: raw-files
+    platforms: all
+    upstream: bloc97/Anime4K
+    ref: v4.0.1
+    version: v4.0.1
+    files:
+      - source: glsl/Restore/Anime4K_Restore_CNN_L.glsl
+        target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_L.glsl
+        sha256: d6efe215e6ee8af1ec560478a91afc1df83fac4ba43b2c806ee61ca2267ed674
+        license: MIT
+    license:
+      spdx: MIT
+      files:
+        - path: LICENSE
+          license: MIT
+          repository: bloc97/Anime4K
+          ref: v4.0.1
+          source_path: LICENSE
+
+  - id: anime4k-upscale-gan
+    kind: raw-files
+    platforms: all
+    upstream: bloc97/Anime4K
+    # v4.0.1 removed the GAN upscalers; this immutable commit is the last
+    # upstream revision that still contains Anime4K_Upscale_GAN_x2_M.glsl.
+    ref: 8e39551ce96ed172605c89b7dd8be855b5502cc9
+    version: v4.0-GAN-8e39551
+    files:
+      - source: glsl/Upscale/Anime4K_Upscale_GAN_x2_M.glsl
+        target: portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x2_M.glsl
+        sha256: 8a1d33fddc8939c1e0eb4d6ad6a7baf653dd420d6b713e385b7c73be90d9affe
+        license: MIT
+    license:
+      spdx: MIT
+      files:
+        - path: LICENSE
+          license: MIT
+          repository: bloc97/Anime4K
+          ref: 8e39551ce96ed172605c89b7dd8be855b5502cc9
+          source_path: LICENSE
+
+  - id: k7-modernanime
+    kind: raw-files
+    platforms: all
+    upstream: hooke007/mpv_PlayKit
+    # The shader files carry an in-file MIT notice with hooke007's copyright.
+    ref: 4921c6796620a13c2c03266f368d59d354a67b72
+    version: "2026-05-30"
+    files:
+      - source: portable_config/shaders/ESRGAN/k7_modernAnime_FHD_x2.glsl
+        target: portable_config/shaders/ESRGAN/k7_modernAnime_FHD_x2.glsl
+        sha256: 8a18e739a2129982e5f1a8cdf7a33c55fd9d27067bfcdf974bc2941d60abe377
+        license: MIT
+      - source: portable_config/shaders/ESRGAN/k7_modernAnime_DT_FHD_x2.glsl
+        target: portable_config/shaders/ESRGAN/k7_modernAnime_DT_FHD_x2.glsl
+        sha256: d4243814980e875fd246fab2f0420b93de0dcbc086c87ea1f810d0df79813837
+        license: MIT
+    license:
+      spdx: MIT
+      files:
+        - path: MIT.txt
+          license: MIT
+          repository: spdx/license-list-data
+          ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
+          source_path: text/MIT.txt
+
+  - id: adaptive-sharpen-lite
+    kind: raw-files
+    platforms: all
+    upstream: hooke007/mpv_PlayKit
+    # GLSL adaptation of bacondither's adaptive-sharpen; the file embeds the
+    # full BSD-2-Clause notice and copyright.
+    ref: 4921c6796620a13c2c03266f368d59d354a67b72
+    version: "2026-05-30"
+    files:
+      - source: portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_RT.glsl
+        target: portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_RT.glsl
+        sha256: 2b94d5dfe14c614e9e9f1aaf4a9fe994b5aa78a5c8c9b5d5706bee6409b09a17
+        license: BSD-2-Clause
+    license:
+      spdx: BSD-2-Clause
+      files:
+        - path: BSD-2-Clause.txt
+          license: BSD-2-Clause
+          repository: spdx/license-list-data
+          ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
+          source_path: text/BSD-2-Clause.txt
+
+  - id: nnedi3
+    kind: raw-files
+    platforms: all
+    upstream: bjin/mpv-prescalers
+    # Upstream publishes this shader as a .hook file; mpv does not require a
+    # particular extension, so it is installed with the conventional .glsl name.
+    ref: b3f0a59d68f33b7162051ea5970a5169558f0ea2
+    version: "2024-01-11"
+    files:
+      - source: nnedi3-nns64-win8x4.hook
+        target: portable_config/shaders/EDI/nnedi3_nns64_win8x4.glsl
+        sha256: ad6b260942aef9489a389ae19ba8067930e8d26c63a82fb6e23901f570da9329
+        license: LGPL-3.0-or-later
+    license:
+      spdx: LGPL-3.0-or-later
+      files:
+        - path: LGPL-3.0-or-later.txt
+          license: LGPL-3.0-or-later
+          repository: spdx/license-list-data
+          ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
+          source_path: text/LGPL-3.0-or-later.txt
+
+  - id: fsrcnnx
+    kind: file
+    platforms: all
+    upstream: igv/FSRCNN-TensorFlow
+    release:
+      mode: tag
+      tag: "1.1"
+    asset:
+      pattern: '^FSRCNNX_x2_16-0-4-1\.glsl$'
+      version: '{release_tag}'
+    license:
+      # The shader file itself declares LGPL-3.0-or-later; the repository
+      # license is GPL-3.0.  Ship the canonical LGPL text named by the file.
+      spdx: LGPL-3.0-or-later
+      files:
+        - path: LGPL-3.0-or-later.txt
+          license: LGPL-3.0-or-later
+          repository: spdx/license-list-data
+          ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
+          source_path: text/LGPL-3.0-or-later.txt
+    install:
+      - source: FSRCNNX_x2_16-0-4-1.glsl
+        target: portable_config/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl

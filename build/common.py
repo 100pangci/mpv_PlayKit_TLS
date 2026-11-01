@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -62,7 +63,7 @@ def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], d
     project = load_yaml(project_path)
 
     components: dict[str, dict[str, Any]] = {}
-    for name in ("binaries.yml", "scripts.yml", "resources.yml"):
+    for name in ("binaries.yml", "scripts.yml", "resources.yml", "shaders.yml"):
         path = manifest_dir / name
         if not path.is_file():
             fail(f"missing {path}")
@@ -82,8 +83,43 @@ def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], d
     for identifier, component in components.items():
         if not component.get("upstream"):
             fail(f"{identifier}: missing upstream")
-        if not component.get("asset", {}).get("pattern"):
-            fail(f"{identifier}: missing asset.pattern")
+        kind = str(component.get("kind") or "binary")
+        if kind == "raw-files":
+            # Raw files are immutable blobs pinned by a repository commit.  The
+            # manifest ref may be a tag or a commit, but resolve turns it into a
+            # full commit; the lock records that commit and every file has its
+            # own SHA-256.
+            if not component.get("ref"):
+                fail(f"{identifier}: raw-files component needs ref")
+            files = component.get("files")
+            if not isinstance(files, list) or not files:
+                fail(f"{identifier}: raw-files component needs a non-empty files list")
+            for item in files:
+                if not isinstance(item, dict):
+                    fail(f"{identifier}: every raw file entry must be a mapping")
+                source = str(item.get("source") or "")
+                target = str(item.get("target") or "")
+                for label, value in (("source", source), ("target", target)):
+                    path = Path(value)
+                    if not value or path.is_absolute() or ".." in path.parts:
+                        fail(f"{identifier}: raw file {label} is unsafe: {value!r}")
+                if Path(source).suffix.lower() not in {".glsl", ".hook"}:
+                    fail(f"{identifier}: raw file source must be .glsl or .hook: {source}")
+                if Path(target).suffix.lower() != ".glsl" or not target.startswith(
+                    "portable_config/shaders/"
+                ):
+                    fail(
+                        f"{identifier}: raw file target must be a .glsl file under "
+                        f"portable_config/shaders/: {target}"
+                    )
+                digest = str(item.get("sha256") or "")
+                if not re.fullmatch(r"[0-9a-f]{64}", digest):
+                    fail(f"{identifier}: raw file {source} needs a lowercase sha256")
+                if not item.get("license"):
+                    fail(f"{identifier}: raw file {source} needs a license")
+        else:
+            if not component.get("asset", {}).get("pattern"):
+                fail(f"{identifier}: missing asset.pattern")
         license_info = component.get("license") or {}
         if not license_info:
             fail(f"{identifier}: missing license metadata")

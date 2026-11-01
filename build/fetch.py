@@ -73,25 +73,9 @@ def download(url: str, destination: Path, *, timeout: int = 180, retries: int = 
     raise BuildError(f"failed to download {url}: {last_error}")
 
 
-def fetch_component(component: dict[str, Any], work: Path) -> dict[str, Any]:
+def fetch_license_files(component: dict[str, Any], work: Path, version_dir: str) -> list[dict[str, Any]]:
     identifier = component["id"]
-    asset_name = component["asset_name"]
-    destination = work / "downloads" / identifier / asset_name
-    expected = component.get("sha256")
-    if destination.is_file() and expected and sha256_file(destination) == expected:
-        log(f"cached {identifier}: {destination.name} ({human_size(destination.stat().st_size)})")
-        actual, size = expected, destination.stat().st_size
-    else:
-        log(f"fetching {identifier}: {component.get('url')}")
-        actual, size = download(component["url"], destination)
-        if expected and actual != expected:
-            destination.unlink(missing_ok=True)
-            fail(f"{identifier}: sha256 mismatch: expected {expected}, got {actual}")
-        if not expected:
-            log(f"{identifier}: no digest in lock; recorded {actual}")
-
     license_entries = []
-    version_dir = safe_name(str(component.get("version") or component.get("release_tag") or "unknown"))
     for item in (component.get("license") or {}).get("files", []):
         relative = Path(item["path"])
         if relative.is_absolute() or ".." in relative.parts:
@@ -131,7 +115,81 @@ def fetch_component(component: dict[str, Any], work: Path) -> dict[str, Any]:
                 "size": license_size,
             }
         )
+    return license_entries
 
+
+def fetch_raw_component(component: dict[str, Any], work: Path) -> dict[str, Any]:
+    identifier = component["id"]
+    commit = str(component.get("commit") or "")
+    if not FULL_COMMIT.fullmatch(commit):
+        fail(f"{identifier}: raw-files component is not pinned to a full commit")
+    version_dir = safe_name(str(component.get("version") or component.get("ref") or "unknown"))
+    files = []
+    for item in component.get("files", []):
+        target = str(item.get("target") or "")
+        relative = Path(target)
+        if not target or relative.is_absolute() or ".." in relative.parts:
+            fail(f"{identifier}: unsafe raw file target {target!r}")
+        expected = str(item.get("sha256") or "")
+        if not FULL_COMMIT.fullmatch(commit) or not expected:
+            fail(f"{identifier}: raw file {target} has no pinned sha256")
+        if not item.get("url") or f"/{commit}/" not in item["url"]:
+            fail(f"{identifier}: raw file {target} URL does not use its pinned commit")
+        destination = work / "downloads" / identifier / relative
+        if destination.is_file() and sha256_file(destination) == expected:
+            log(f"cached {identifier}/{target}: {human_size(destination.stat().st_size)}")
+            actual, size = expected, destination.stat().st_size
+        else:
+            log(f"fetching {identifier}/{target}: {item['url']}")
+            actual, size = download(item["url"], destination)
+            if actual != expected:
+                destination.unlink(missing_ok=True)
+                fail(
+                    f"{identifier}: raw file {target} sha256 mismatch: "
+                    f"expected {expected}, got {actual}"
+                )
+        files.append(
+            {
+                "source": item.get("source"),
+                "target": target,
+                "local_path": str(destination.relative_to(work)).replace("\\", "/"),
+                "license": item.get("license"),
+                "url": item["url"],
+                "sha256": actual,
+                "size": size,
+            }
+        )
+    return {
+        "id": identifier,
+        "kind": "raw-files",
+        "version": component.get("version"),
+        "ref": component.get("ref"),
+        "commit": commit,
+        "files": files,
+        "license_files": fetch_license_files(component, work, version_dir),
+    }
+
+
+def fetch_component(component: dict[str, Any], work: Path) -> dict[str, Any]:
+    if component.get("kind") == "raw-files":
+        return fetch_raw_component(component, work)
+    identifier = component["id"]
+    asset_name = component["asset_name"]
+    destination = work / "downloads" / identifier / asset_name
+    expected = component.get("sha256")
+    if destination.is_file() and expected and sha256_file(destination) == expected:
+        log(f"cached {identifier}: {destination.name} ({human_size(destination.stat().st_size)})")
+        actual, size = expected, destination.stat().st_size
+    else:
+        log(f"fetching {identifier}: {component.get('url')}")
+        actual, size = download(component["url"], destination)
+        if expected and actual != expected:
+            destination.unlink(missing_ok=True)
+            fail(f"{identifier}: sha256 mismatch: expected {expected}, got {actual}")
+        if not expected:
+            log(f"{identifier}: no digest in lock; recorded {actual}")
+
+    version_dir = safe_name(str(component.get("version") or component.get("release_tag") or "unknown"))
     return {
         "id": identifier,
         "asset_name": asset_name,
@@ -140,7 +198,7 @@ def fetch_component(component: dict[str, Any], work: Path) -> dict[str, Any]:
         "size": size,
         "version": component.get("version"),
         "release_tag": component.get("release_tag"),
-        "license_files": license_entries,
+        "license_files": fetch_license_files(component, work, version_dir),
     }
 
 

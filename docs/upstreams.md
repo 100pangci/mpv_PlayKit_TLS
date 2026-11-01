@@ -10,8 +10,14 @@
 | `yt-dlp-linux` | `yt-dlp/yt-dlp` | latest | `^yt-dlp_linux$` | `{release_tag}` | `yt-dlp` |
 | `uosc` | `tomasklaen/uosc` | latest | `^uosc\.zip$` | `{release_tag}` | `portable_config/scripts/uosc/`, `portable_config/fonts/` |
 | `lxgw-wenkai-mono-lite` | `lxgw/LxgwWenKai-Lite` | latest | `^LXGWWenKaiMonoLite-Regular\.ttf$` | `{release_tag}` | `portable_config/fonts/` |
+| `anime4k-restore` | `bloc97/Anime4K` | raw `v4.0.1` | 固定文件路径 + SHA-256 | `v4.0.1` | `portable_config/shaders/Anime4K/` |
+| `anime4k-upscale-gan` | `bloc97/Anime4K` | raw commit `8e39551` | 固定文件路径 + SHA-256 | `v4.0-GAN-8e39551` | `portable_config/shaders/Anime4K/` |
+| `fsrcnnx` | `igv/FSRCNN-TensorFlow` | tag `1.1` | `^FSRCNNX_x2_16-0-4-1\.glsl$` | `1.1` | `portable_config/shaders/FSRCNNX/` |
+| `nnedi3` | `bjin/mpv-prescalers` | raw commit `b3f0a59` | 固定文件路径 + SHA-256 | `2024-01-11` | `portable_config/shaders/EDI/` |
+| `k7-modernanime` | `hooke007/mpv_PlayKit` | raw commit `4921c67` | 固定文件路径 + SHA-256 | `2026-05-30` | `portable_config/shaders/ESRGAN/` |
+| `adaptive-sharpen-lite` | `hooke007/mpv_PlayKit` | raw commit `4921c67` | 固定文件路径 + SHA-256 | `2026-05-30` | `portable_config/shaders/Adaptive_sharpen/` |
 
-所有匹配都要求 **恰好一个** 资产。零个或多个都会让解析失败并停止发布。
+所有 Release 资产匹配都要求 **恰好一个** 资产。零个或多个都会让解析失败并停止发布。
 
 ## Release 选择
 
@@ -20,6 +26,30 @@
   `nightly`，因为 pkgforge 的 nightly 资产包含当前 mpv master 构建。
 - 若上游改变资产命名，解析会失败而不是悄悄使用旧文件；需要更新
   `manifests/*.yml` 的正则后重新生成 lock。
+
+## 原始文件（GLSL）
+
+`kind: raw-files` 用于没有 Release 资产、但需要固定到某个上游提交的文件：
+
+```yaml
+- id: anime4k-restore
+  kind: raw-files
+  upstream: bloc97/Anime4K
+  ref: v4.0.1
+  files:
+    - source: glsl/Restore/Anime4K_Restore_CNN_L.glsl
+      target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_L.glsl
+      sha256: <64 位小写十六进制>
+      license: MIT
+```
+
+`build.resolve` 把 `ref` 解析成完整 commit，下载 `source` 并核对声明的 SHA-256；
+lock 只保存完整 commit、`raw.githubusercontent.com/<repo>/<commit>/<source>` 和
+哈希。`build.fetch` 再下载一次并校验，`build.assemble` 按 `target` 安装。
+仓库不保存 shader 文件本身。
+
+`manifests/shaders.yml` 同时列出排除项：Ani4Kv2/AniSD 的模型权重是
+CC BY-NC 4.0，QCOM 的来源与许可证无法确认。
 
 ## 哈希与 lock
 
@@ -120,9 +150,11 @@ application/octet-stream`，公开仓库和私有仓库都能工作。仓库公�
 ## 新增或替换上游
 
 1. 在对应 `manifests/*.yml` 增加组件：`upstream`、`release`、`asset.pattern`、
-   `asset.version`、`license`、`extract`、`install`。
-2. 确认资产在目标 Release 中唯一匹配。
-3. 运行 `python -m build.resolve --output sources.lock.json`。
+   `asset.version`、`license`、`extract`、`install`；shader 使用 `raw-files` 的
+   `ref`/`files` 结构。
+2. 确认资产在目标 Release 中唯一匹配；raw 文件填写实际 SHA-256。
+3. 运行 `python -m build.resolve --output sources.lock.json`。只更新部分组件时
+   使用 `--only <id>`（可重复），它会保留 lock 中其他组件的现有版本。
 4. 运行本地 fetch/assemble/smoke/package/verify，或直接跑 `Build` 工作流。
 5. 提交 manifest 与新的 lock。
 

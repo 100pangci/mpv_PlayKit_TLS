@@ -1,5 +1,182 @@
 {
   "components": {
+    "adaptive-sharpen-lite": {
+      "commit": "4921c6796620a13c2c03266f368d59d354a67b72",
+      "files": [
+        {
+          "license": "BSD-2-Clause",
+          "sha256": "2b94d5dfe14c614e9e9f1aaf4a9fe994b5aa78a5c8c9b5d5706bee6409b09a17",
+          "size": 12104,
+          "source": "portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_RT.glsl",
+          "target": "portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_RT.glsl",
+          "url": "https://raw.githubusercontent.com/hooke007/mpv_PlayKit/4921c6796620a13c2c03266f368d59d354a67b72/portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_RT.glsl"
+        }
+      ],
+      "id": "adaptive-sharpen-lite",
+      "kind": "raw-files",
+      "license": {
+        "files": [
+          {
+            "commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0",
+            "license": "BSD-2-Clause",
+            "path": "BSD-2-Clause.txt",
+            "repository": "spdx/license-list-data",
+            "sha256": "f32fb3b417a194167cfad068223fc975ba96c5960513a10f66a3c28720aec1df",
+            "size": 1267,
+            "source_path": "text/BSD-2-Clause.txt",
+            "url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/BSD-2-Clause.txt"
+          }
+        ],
+        "spdx": "BSD-2-Clause"
+      },
+      "platforms": "all",
+      "ref": "4921c6796620a13c2c03266f368d59d354a67b72",
+      "upstream": "hooke007/mpv_PlayKit",
+      "version": "2026-05-30"
+    },
+    "anime4k-restore": {
+      "commit": "4029bf701ecaa15f163cdc49cffe5501c1acf410",
+      "files": [
+        {
+          "license": "MIT",
+          "sha256": "d6efe215e6ee8af1ec560478a91afc1df83fac4ba43b2c806ee61ca2267ed674",
+          "size": 69921,
+          "source": "glsl/Restore/Anime4K_Restore_CNN_L.glsl",
+          "target": "portable_config/shaders/Anime4K/Anime4K_Restore_CNN_L.glsl",
+          "url": "https://raw.githubusercontent.com/bloc97/Anime4K/4029bf701ecaa15f163cdc49cffe5501c1acf410/glsl/Restore/Anime4K_Restore_CNN_L.glsl"
+        }
+      ],
+      "id": "anime4k-restore",
+      "kind": "raw-files",
+      "license": {
+        "files": [
+          {
+            "commit": "4029bf701ecaa15f163cdc49cffe5501c1acf410",
+            "license": "MIT",
+            "path": "LICENSE",
+            "repository": "bloc97/Anime4K",
+            "sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5",
+            "size": 1063,
+            "source_path": "LICENSE",
+            "url": "https://raw.githubusercontent.com/bloc97/Anime4K/4029bf701ecaa15f163cdc49cffe5501c1acf410/LICENSE"
+          }
+        ],
+        "spdx": "MIT"
+      },
+      "platforms": "all",
+      "ref": "v4.0.1",
+      "upstream": "bloc97/Anime4K",
+      "version": "v4.0.1"
+    },
+    "anime4k-upscale-gan": {
+      "commit": "8e39551ce96ed172605c89b7dd8be855b5502cc9",
+      "files": [
+        {
+          "license": "MIT",
+          "sha256": "8a1d33fddc8939c1e0eb4d6ad6a7baf653dd420d6b713e385b7c73be90d9affe",
+          "size": 146140,
+          "source": "glsl/Upscale/Anime4K_Upscale_GAN_x2_M.glsl",
+          "target": "portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x2_M.glsl",
+          "url": "https://raw.githubusercontent.com/bloc97/Anime4K/8e39551ce96ed172605c89b7dd8be855b5502cc9/glsl/Upscale/Anime4K_Upscale_GAN_x2_M.glsl"
+        }
+      ],
+      "id": "anime4k-upscale-gan",
+      "kind": "raw-files",
+      "license": {
+        "files": [
+          {
+            "commit": "8e39551ce96ed172605c89b7dd8be855b5502cc9",
+            "license": "MIT",
+            "path": "LICENSE",
+            "repository": "bloc97/Anime4K",
+            "sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5",
+            "size": 1063,
+            "source_path": "LICENSE",
+            "url": "https://raw.githubusercontent.com/bloc97/Anime4K/8e39551ce96ed172605c89b7dd8be855b5502cc9/LICENSE"
+          }
+        ],
+        "spdx": "MIT"
+      },
+      "platforms": "all",
+      "ref": "8e39551ce96ed172605c89b7dd8be855b5502cc9",
+      "upstream": "bloc97/Anime4K",
+      "version": "v4.0-GAN-8e39551"
+    },
+    "fsrcnnx": {
+      "api_url": "https://api.github.com/repos/igv/FSRCNN-TensorFlow/releases/assets/53483506",
+      "asset_id": 53483506,
+      "asset_name": "FSRCNNX_x2_16-0-4-1.glsl",
+      "commit": null,
+      "id": "fsrcnnx",
+      "kind": "file",
+      "license": {
+        "files": [
+          {
+            "commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0",
+            "license": "LGPL-3.0-or-later",
+            "path": "LGPL-3.0-or-later.txt",
+            "repository": "spdx/license-list-data",
+            "sha256": "996af0513df21f7496288951c41428a03c174e9e4a9d63665c57d670f845ccb1",
+            "size": 42098,
+            "source_path": "text/LGPL-3.0-or-later.txt",
+            "url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/LGPL-3.0-or-later.txt"
+          }
+        ],
+        "spdx": "LGPL-3.0-or-later"
+      },
+      "platforms": "all",
+      "published_at": "2017-11-09T13:04:59Z",
+      "release_mode": "tag",
+      "release_tag": "1.1",
+      "release_url": "https://github.com/igv/FSRCNN-TensorFlow/releases/tag/1.1",
+      "sha256": "d5a24a271e5d9a3f7f7a053b150c460a44c25b3cf7f770857d57cc3a2e1c9965",
+      "size": 246868,
+      "upstream": "igv/FSRCNN-TensorFlow",
+      "url": "https://github.com/igv/FSRCNN-TensorFlow/releases/download/1.1/FSRCNNX_x2_16-0-4-1.glsl",
+      "version": "1.1"
+    },
+    "k7-modernanime": {
+      "commit": "4921c6796620a13c2c03266f368d59d354a67b72",
+      "files": [
+        {
+          "license": "MIT",
+          "sha256": "8a18e739a2129982e5f1a8cdf7a33c55fd9d27067bfcdf974bc2941d60abe377",
+          "size": 225039,
+          "source": "portable_config/shaders/ESRGAN/k7_modernAnime_FHD_x2.glsl",
+          "target": "portable_config/shaders/ESRGAN/k7_modernAnime_FHD_x2.glsl",
+          "url": "https://raw.githubusercontent.com/hooke007/mpv_PlayKit/4921c6796620a13c2c03266f368d59d354a67b72/portable_config/shaders/ESRGAN/k7_modernAnime_FHD_x2.glsl"
+        },
+        {
+          "license": "MIT",
+          "sha256": "d4243814980e875fd246fab2f0420b93de0dcbc086c87ea1f810d0df79813837",
+          "size": 224687,
+          "source": "portable_config/shaders/ESRGAN/k7_modernAnime_DT_FHD_x2.glsl",
+          "target": "portable_config/shaders/ESRGAN/k7_modernAnime_DT_FHD_x2.glsl",
+          "url": "https://raw.githubusercontent.com/hooke007/mpv_PlayKit/4921c6796620a13c2c03266f368d59d354a67b72/portable_config/shaders/ESRGAN/k7_modernAnime_DT_FHD_x2.glsl"
+        }
+      ],
+      "id": "k7-modernanime",
+      "kind": "raw-files",
+      "license": {
+        "files": [
+          {
+            "commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0",
+            "license": "MIT",
+            "path": "MIT.txt",
+            "repository": "spdx/license-list-data",
+            "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+            "size": 1078,
+            "source_path": "text/MIT.txt",
+            "url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/MIT.txt"
+          }
+        ],
+        "spdx": "MIT"
+      },
+      "platforms": "all",
+      "ref": "4921c6796620a13c2c03266f368d59d354a67b72",
+      "upstream": "hooke007/mpv_PlayKit",
+      "version": "2026-05-30"
+    },
     "lxgw-wenkai-mono-lite": {
       "api_url": "https://api.github.com/repos/lxgw/LxgwWenKai-Lite/releases/assets/651286501",
       "asset_id": 651286501,
@@ -34,10 +211,10 @@
       "version": "v1.530"
     },
     "mpv-linux": {
-      "api_url": "https://api.github.com/repos/pkgforge-dev/mpv-AppImage/releases/assets/695117485",
-      "asset_id": 695117485,
-      "asset_name": "mpv-v0.41.0-1373-g9e2ed65eb-anylinux-x86_64.AppImage",
-      "commit": "9e2ed65eb0c02f99a352dfa1ad3c85ecceefe005",
+      "api_url": "https://api.github.com/repos/pkgforge-dev/mpv-AppImage/releases/assets/698210001",
+      "asset_id": 698210001,
+      "asset_name": "mpv-v0.41.0-1378-g914a11c30-anylinux-x86_64.AppImage",
+      "commit": "914a11c30c6a1710fe1f4333654696f2dfb3c3af",
       "id": "mpv-linux",
       "kind": "binary",
       "license": {
@@ -54,7 +231,7 @@
             "url": "https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/953226d87422e9ef2307afacd2e049b1ee0a7f56/LICENSE"
           },
           {
-            "commit": "9e2ed65eb0c02f99a352dfa1ad3c85ecceefe005",
+            "commit": "914a11c30c6a1710fe1f4333654696f2dfb3c3af",
             "license": "GPL-2.0-or-later",
             "path": "LICENSE.GPL",
             "repository": "mpv-player/mpv",
@@ -62,10 +239,10 @@
             "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
             "size": 17984,
             "source_path": "LICENSE.GPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/9e2ed65eb0c02f99a352dfa1ad3c85ecceefe005/LICENSE.GPL"
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/914a11c30c6a1710fe1f4333654696f2dfb3c3af/LICENSE.GPL"
           },
           {
-            "commit": "9e2ed65eb0c02f99a352dfa1ad3c85ecceefe005",
+            "commit": "914a11c30c6a1710fe1f4333654696f2dfb3c3af",
             "license": "LGPL-2.1-or-later",
             "path": "LICENSE.LGPL",
             "repository": "mpv-player/mpv",
@@ -73,7 +250,7 @@
             "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
             "size": 26410,
             "source_path": "LICENSE.LGPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/9e2ed65eb0c02f99a352dfa1ad3c85ecceefe005/LICENSE.LGPL"
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/914a11c30c6a1710fe1f4333654696f2dfb3c3af/LICENSE.LGPL"
           }
         ],
         "parts": [
@@ -97,15 +274,15 @@
         "linux-x64"
       ],
       "provides": "mpv",
-      "published_at": "2026-10-31T10:48:45Z",
+      "published_at": "2026-11-01T11:56:47Z",
       "release_mode": "tag",
       "release_tag": "nightly",
       "release_url": "https://github.com/pkgforge-dev/mpv-AppImage/releases/tag/nightly",
-      "sha256": "2c21f86f9b198595ba02bfb3af4bceeaec4302761ba56e3731dba0716883a536",
-      "size": 32030905,
+      "sha256": "1f7e8ad7024106806a2b8f29e48df34d46bbc678a213e32b8131dacf710a66d2",
+      "size": 32032861,
       "upstream": "pkgforge-dev/mpv-AppImage",
-      "url": "https://github.com/pkgforge-dev/mpv-AppImage/releases/download/nightly/mpv-v0.41.0-1373-g9e2ed65eb-anylinux-x86_64.AppImage",
-      "version": "v0.41.0-1373-g9e2ed65eb"
+      "url": "https://github.com/pkgforge-dev/mpv-AppImage/releases/download/nightly/mpv-v0.41.0-1378-g914a11c30-anylinux-x86_64.AppImage",
+      "version": "v0.41.0-1378-g914a11c30"
     },
     "mpv-windows": {
       "api_url": "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/assets/696901230",
@@ -165,6 +342,40 @@
       "upstream": "shinchiro/mpv-winbuild-cmake",
       "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261101/mpv-x86_64-20261101-git-48fca90e8c.7z",
       "version": "20261101-git-48fca90e8c"
+    },
+    "nnedi3": {
+      "commit": "b3f0a59d68f33b7162051ea5970a5169558f0ea2",
+      "files": [
+        {
+          "license": "LGPL-3.0-or-later",
+          "sha256": "ad6b260942aef9489a389ae19ba8067930e8d26c63a82fb6e23901f570da9329",
+          "size": 115541,
+          "source": "nnedi3-nns64-win8x4.hook",
+          "target": "portable_config/shaders/EDI/nnedi3_nns64_win8x4.glsl",
+          "url": "https://raw.githubusercontent.com/bjin/mpv-prescalers/b3f0a59d68f33b7162051ea5970a5169558f0ea2/nnedi3-nns64-win8x4.hook"
+        }
+      ],
+      "id": "nnedi3",
+      "kind": "raw-files",
+      "license": {
+        "files": [
+          {
+            "commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0",
+            "license": "LGPL-3.0-or-later",
+            "path": "LGPL-3.0-or-later.txt",
+            "repository": "spdx/license-list-data",
+            "sha256": "996af0513df21f7496288951c41428a03c174e9e4a9d63665c57d670f845ccb1",
+            "size": 42098,
+            "source_path": "text/LGPL-3.0-or-later.txt",
+            "url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/LGPL-3.0-or-later.txt"
+          }
+        ],
+        "spdx": "LGPL-3.0-or-later"
+      },
+      "platforms": "all",
+      "ref": "b3f0a59d68f33b7162051ea5970a5169558f0ea2",
+      "upstream": "bjin/mpv-prescalers",
+      "version": "2024-01-11"
     },
     "uosc": {
       "api_url": "https://api.github.com/repos/tomasklaen/uosc/releases/assets/500236844",
@@ -343,8 +554,8 @@
       "version": "2026.10.26"
     }
   },
-  "generated_at": "2026-11-01T11:52:11Z",
-  "inputs_hash": "e65d252619b402f4d9342fe6495868365711e86e00ac9d5715a335bcd60ef3b5",
+  "generated_at": "2026-11-01T13:50:57Z",
+  "inputs_hash": "9dfdd79abc41f5e1103964d9a35070909a5861eecab41d12a083458bfa6415ec",
   "repository": "100pangci/mpv_PlayKit_TLS",
   "schema": 1
 }

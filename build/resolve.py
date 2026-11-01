@@ -26,6 +26,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=DEFAULT_LOCK)
     parser.add_argument("--repository", default=None, help="override the GitHub repository in manifests/project.yml")
     parser.add_argument("--generated-at", default=None)
+    parser.add_argument(
+        "--only",
+        action="append",
+        default=None,
+        metavar="ID",
+        help="resolve only this component and merge it into an existing lock; may be repeated",
+    )
     parser.add_argument("--check", action="store_true", help="compare with --output instead of writing it")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -35,7 +42,26 @@ def main(argv: list[str] | None = None) -> int:
     if not repository:
         fail("manifests/project.yml has no repository")
 
-    lock = build_lock(repository, components, args.generated_at or now_iso())
+    selected_components = components
+    requested: list[str] = []
+    if args.only:
+        requested = sorted(set(args.only))
+        unknown = [identifier for identifier in requested if identifier not in components]
+        if unknown:
+            fail(f"unknown component(s) for --only: {', '.join(unknown)}")
+        if not args.output.is_file():
+            fail(f"--only requires an existing lock: {args.output}")
+        selected_components = {identifier: components[identifier] for identifier in requested}
+
+    lock = build_lock(repository, selected_components, args.generated_at or now_iso())
+    if requested:
+        # Target a lock update at new or changed components without refreshing
+        # unrelated floating "latest" releases in the same commit.
+        old = read_json(args.output)
+        merged = dict(old.get("components", {}))
+        for identifier in requested:
+            merged[identifier] = lock["components"][identifier]
+        lock["components"] = merged
     lock["inputs_hash"] = compute_inputs_hash()
 
     summary = {

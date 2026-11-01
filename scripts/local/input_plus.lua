@@ -373,12 +373,13 @@ local HELP_URLS = {
 	[1] = "https://mpv.io/manual/master/",
 	[2] = "https://hooke007.github.io/official_man/mpv.html",
 	[3] = "https://github.com/mpv-player/mpv/wiki/FAQ",
+	[5] = "https://mpv.io/manual/master/#options-glsl-shaders",
 }
 
 local function lazy_helper(index)
 	local number = tonumber(index)
-	if number == 4 or number == 5 then
-		osd("本发行版不包含滤镜或着色器组件，因此没有对应的指南")
+	if number == 4 then
+		osd("本发行版不包含 VapourSynth 滤镜；内置滤镜可在视频菜单中切换")
 		return
 	end
 	local url = number and HELP_URLS[number]
@@ -456,6 +457,7 @@ local function info_text()
 		"循环： " .. info_value(mp.get_property("loop-file")) .. " / " .. info_value(mp.get_property("loop-playlist")),
 		"",
 		"视频滤镜： " .. info_value(mp.get_property("vf")),
+		"着色器： " .. info_value(mp.get_property("glsl-shaders")),
 		"音频滤镜： " .. info_value(mp.get_property("af")),
 	}
 

@@ -40,7 +40,8 @@
 - 181 个有内嵌条款但范围仍需审查。
 
 部分文件同时包含代码许可证（如 MIT）和模型条款（如 CC BY-NC 4.0），不能合并
-成单一仓库许可证。本发行版完全不包含 shader，因此不涉及这些文件。
+成单一仓库许可证。当前发行版只加入逐文件许可证和上游来源都明确的少数 shader；
+Ani4Kv2/AniSD 和 QCOM 仍然排除。
 
 ## 本仓库的处理
 
@@ -49,7 +50,8 @@
 | 基线中未修改的 uosc 文件 | 改为构建时从上游下载当前 Release（仅 `main.lua` 应用自动 UI 缩放补丁） |
 | 基线中修改过的 uosc | 不导入；本项目只通过配置层、构建期 `main.lua` 补丁和缩略图消息协议定制 |
 | 9 个未解决 Lua | 全部由原创实现或官方上游替代：`idle-brand`、`input_plus`、`save_global_props`、`thumbfast` 重写；`lang` 使用 uosc 官方 `intl.lua`。`input_plus` 现已覆盖基线的按键检测、信息面板、导入、设备/轨道/章节工具、播放列表、速度与 AB 并轨等 P0–P2 功能，但不复制基线代码，也不调用 PowerShell |
-| shader / VapourSynth / AI 组件 | 不导入 |
+| shader | 只导入上游来源固定、逐文件许可证明确的 GLSL（Anime4K、FSRCNNX、NNEDI3、k7、Adaptive）；Ani4Kv2/AniSD（CC BY-NC）和 QCOM 不导入 |
+| VapourSynth / AI 组件 | 不导入 |
 | 基线二进制 | 不导入；改为从各上游 Release 获取并校验 |
 | 配置思路 | 作为需求参考，重新编写 |
 
@@ -59,3 +61,5 @@
 - 每个第三方组件都能在 `THIRD_PARTY.md`、`sources.lock.json` 和包内
   `licenses/INDEX.json` 中追溯。
 - `build/verify.py` 对已知的高风险路径做硬性拒绝，避免后续维护时误加。
+  它只允许 `manifests/shaders.yml` 明确列出的 `.glsl` 目标，继续拒绝
+  `.vpy`、`.onnx`、VapourSynth 路径和其他未声明的 shader。

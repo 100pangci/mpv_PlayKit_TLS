@@ -4,10 +4,10 @@
 平台适配、构建脚本和上游来源定义；mpv、yt-dlp、uosc、字体等第三方文件在构建时
 从上游下载并校验，不长期入库。
 
-功能目标：除滤镜外，与基线 `mpv-lazy-20260510.exe` 保持一致的用户体验，包括
-uosc 界面与菜单、完整快捷键、时间轴缩略图、属性保存、统计/控制台、profiles、
-截图、yt-dlp 在线播放和播放器内更新检测。所有历史 PlayKit Lua 均已由原创实现或
-官方上游替代，不复制来源不明的代码。
+功能目标：除 VapourSynth/AI 滤镜外，与基线 `mpv-lazy-20260510.exe` 保持一致的用户
+体验，包括 uosc 界面与菜单、完整快捷键、时间轴缩略图、属性保存、统计/控制台、
+profiles、截图、yt-dlp 在线播放和播放器内更新检测。所有历史 PlayKit Lua 均已由
+原创实现或官方上游替代，不复制来源不明的代码。
 
 包含：
 
@@ -16,14 +16,17 @@ uosc 界面与菜单、完整快捷键、时间轴缩略图、属性保存、统
 - uosc（构建时仅对 `main.lua` 应用自动 UI 缩放补丁，其余文件保持上游）与
   LXGW WenKai Mono Lite 字体
 - 播放器配置、profiles、按键菜单与原创本地脚本
+- 构建时从上游下载并校验的 GLSL 着色器：Anime4K Restore/GAN、FSRCNNX、NNEDI3、
+  k7 modernAnime、Adaptive sharpen
 - Rust `umpv` 单实例启动器：多个文件交给同一个 mpv 窗口，Windows/Linux 共用一套源码
 - 纯净/测试/跑分模式启动器（`installer/modes/`），用于隔离配置问题和基准测试
 - 播放器内自动更新：Rust 更新器负责下载、校验、patch 和事务式替换
 - 用户配置 patch 层（`portable_config/user/`），更新时自动重新应用
 - GitHub Actions 每月自动检查、构建与发布
 
-不包含 GLSL shader、VapourSynth、AI 超分/补帧、CUDA、TensorRT、DirectML 或模型。
-这是唯一有意偏离基线的功能范围；菜单中的滤镜/着色器条目也已移除。
+不包含 VapourSynth、AI 超分/补帧、CUDA、TensorRT、DirectML、模型，以及许可证
+不允许再分发的 shader（Ani4Kv2/AniSD 的模型为 CC BY-NC 4.0，QCOM 来源不明）。
+这些文件不会进入仓库或构建产物。
 
 ## 下载与使用
 
@@ -167,7 +170,7 @@ Ubuntu runner。
 - 固定到新的上游版本：运行 `build.resolve` 生成新的 `sources.lock.json` 并提交；
   下一次检查会因 lock/inputs 变化触发构建。
 
-发布前会检查：必需文件、禁用路径（基线文件、shader、VapourSynth、模型、
+发布前会检查：必需文件、禁用路径（基线文件、未声明的 shader、VapourSynth、模型、
 自更新/yt-dlp 下载 hook）、`update-check` 的联网门禁顺序、压缩包顶层目录与
 SHA-256，以及更新器与 umpv 清单（`playkit-inventory.json`、`.playkit/state.json`、
 helper/umpv 版本/大小/SHA-256、Linux 可执行位）。任何一项失败都不会发布。
@@ -179,7 +182,9 @@ helper/umpv 版本/大小/SHA-256、Linux 可执行位）。任何一项失败�
 - 第三方组件：各自保留上游许可证，构建时下载到包内 `licenses/`；汇总见
   [THIRD_PARTY.md](THIRD_PARTY.md)。本项目不改变这些组件的许可证。
 - 基线审计与历史 PlayKit 材料的处置：见 [LICENSE_PROVENANCE.md](LICENSE_PROVENANCE.md)。
-- 本仓库不包含也不授权任何未解决许可证的历史 PlayKit Lua 或 GLSL 文件。
+- 本仓库不包含也不授权任何未解决许可证的历史 PlayKit Lua 文件。入选的 GLSL
+  着色器只从作者或项目上游按固定提交下载，逐文件记录 SHA-256 和许可证；
+  模型权重为 CC BY-NC 或来源不明的 shader 不导入。
 
 ## 文档
 
