@@ -306,10 +306,13 @@ fn archive_bytes(package: &Path, version: &str, extra: Option<(&str, &[u8])>) ->
             header.set_entry_type(tar::EntryType::Regular);
             header.set_mode(0o644);
             header.set_size(data.len() as u64);
+            // `append_data` rejects `..` before writing.  Build a malicious
+            // header directly instead so the extractor itself is tested.
+            let raw = header.as_mut_bytes();
+            raw[..100].fill(0);
+            raw[..name.len()].copy_from_slice(name.as_bytes());
             header.set_cksum();
-            builder
-                .append_data(&mut header, format!("{top}/{name}"), data)
-                .unwrap();
+            builder.append(&header, data).unwrap();
         }
         builder.into_inner().unwrap().finish().unwrap()
     }

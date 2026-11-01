@@ -808,6 +808,44 @@ mod tests {
     }
 
     #[test]
+    fn rejects_tar_traversal_entry() {
+        let dir = tempdir().unwrap();
+        let archive = dir.path().join("a.tar.gz");
+        let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(
+            Vec::new(),
+            flate2::Compression::default(),
+        ));
+        let mut root = tar::Header::new_gnu();
+        root.set_entry_type(tar::EntryType::Directory);
+        root.set_mode(0o755);
+        root.set_size(0);
+        builder
+            .append_data(
+                &mut root,
+                "mpv-PlayKit-2026.11-linux-x64/",
+                std::io::empty(),
+            )
+            .unwrap();
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_mode(0o644);
+        header.set_size(1);
+        // `append_data` refuses `..`; write the malicious name directly so the
+        // extractor is exercised on every platform.
+        let raw = header.as_mut_bytes();
+        raw[..100].fill(0);
+        let name = b"mpv-PlayKit-2026.11-linux-x64/../../evil";
+        raw[..name.len()].copy_from_slice(name);
+        header.set_cksum();
+        builder.append(&header, &b"x"[..]).unwrap();
+        fs::write(&archive, builder.into_inner().unwrap().finish().unwrap()).unwrap();
+
+        let out = dir.path().join("out");
+        assert!(extract_package(&archive, &out, "2026.11", "linux-x64").is_err());
+        assert!(!dir.path().join("evil").exists());
+    }
+
+    #[test]
     fn rejects_tar_escaping_symlink() {
         let dir = tempdir().unwrap();
         let archive = dir.path().join("a.tar.gz");
