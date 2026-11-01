@@ -357,6 +357,8 @@ class LicenseScopeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary:
             stage = Path(temporary)
+            helper = stage / "playkit-updater.exe"
+            helper.write_bytes(b"fake updater binary" * 4096)
             lock = {
                 "components": {
                     "mpv-windows": {
@@ -397,6 +399,7 @@ class LicenseScopeTests(unittest.TestCase):
                     "mpv-windows": {"sha256": "abc"},
                 },
                 lock=lock,
+                helper=helper,
             )
             manifest = read_json(stage / "manifest.json")
             component = manifest["components"]["uosc"]
@@ -1452,6 +1455,93 @@ class WorkflowTests(unittest.TestCase):
                 "pull_request.head.repo.full_name == github.repository",
                 jobs[name]["if"],
             )
+
+
+    def test_installs_include_verified_updater_and_user_state(self) -> None:
+        from build.userstate import (
+            read_state,
+            verify_package_state,
+            write_inventory,
+            write_package_state,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = Path(temporary)
+            portable = stage / "portable_config"
+            portable.mkdir(parents=True)
+            (portable / "mpv.conf").write_text("volume=100\n", encoding="utf-8")
+            (portable / "input.conf").write_text(
+                "MBTN_LEFT cycle pause\n", encoding="utf-8"
+            )
+            (portable / "profiles.conf").write_text("[gpu-hq]\n", encoding="utf-8")
+            (portable / "platform.conf").write_text("hwdec=auto\n", encoding="utf-8")
+            (portable / "script-opts").mkdir()
+            (portable / "script-opts" / "update-check.conf").write_text(
+                "enabled=yes\n", encoding="utf-8"
+            )
+            write_package_state(stage, "2026.11", "windows-x64", "2026-01-01T00:00:00Z")
+            write_inventory(stage)
+
+            state = read_state(stage)
+            self.assertEqual(state["installed_version"], "2026.11")
+            self.assertEqual(state["official"], state["generated"])
+            self.assertIn("mpv.conf", state["official"])
+            self.assertIn("script-opts/update-check.conf", state["official"])
+            self.assertTrue((portable / "user" / "README.md").is_file())
+            self.assertTrue(
+                (portable / ".playkit" / "official" / "mpv.conf").is_file()
+            )
+            verify_package_state(stage, "2026.11", "windows-x64")
+
+            (portable / "mpv.conf").write_text("volume=100\nchanged=yes\n", encoding="utf-8")
+            with self.assertRaises(Exception):
+                verify_package_state(stage, "2026.11", "windows-x64")
+
+    def test_updater_version_matches_crate(self) -> None:
+        from build.helper import helper_version
+
+        self.assertEqual(helper_version(), "1.0.0")
+
+    def test_install_binding_requires_the_enabled_gate(self) -> None:
+        text = (ROOT / "updater" / "update-check.lua").read_text(encoding="utf-8")
+        start = text.find("local function updater_available")
+        install = text.find("local function install_now")
+        capture = text.find("local function capture_now")
+        rollback = text.find("local function rollback_now")
+        end = text.find("mp.add_key_binding(nil, \"check-now\"")
+        self.assertTrue(0 < start < install < capture < rollback < end)
+        gate = text[start:install]
+        self.assertIn("truthy_disabled(opts.install_enabled)", gate)
+        self.assertIn("state.disabled", gate)
+        self.assertIn("file_exists(helper_path)", gate)
+        for name, begin, finish in (
+            ("install", install, capture),
+            ("capture", capture, rollback),
+            ("rollback", rollback, end),
+        ):
+            body = text[begin:finish]
+            self.assertIn("updater_available()", body, name)
+        self.assertIn('"--wait-pid"', text[install:capture])
+        self.assertIn('"--detach"', text[install:capture])
+        self.assertIn('"--wait-pid"', text[rollback:end])
+        self.assertIn('"--detach"', text[rollback:end])
+        for name in ("install-now", "capture-now", "rollback"):
+            self.assertIn(f"mp.add_key_binding(nil, \"{name}\"", text)
+            self.assertIn(
+                f"script-binding update-check/{name}",
+                (ROOT / "config" / "common" / "input.conf").read_text(encoding="utf-8"),
+            )
+
+    def test_rust_updater_tests_run_on_both_platforms(self) -> None:
+        jobs = self._workflow("build.yml")["jobs"]
+        self.assertIn("rust-tests", jobs)
+        matrix = jobs["rust-tests"]["strategy"]["matrix"]["os"]
+        self.assertIn("ubuntu-24.04", matrix)
+        self.assertIn("windows-latest", matrix)
+        self.assertIn("cargo test", self._runs(jobs["rust-tests"]))
+        self.assertIn("cargo clippy", self._runs(jobs["rust-tests"]))
+        for platform in ("windows-x64", "linux-x64"):
+            self.assertIn("build.helper", self._runs(jobs[platform]))
 
 
 if __name__ == "__main__":

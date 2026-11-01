@@ -44,7 +44,17 @@ installer\windows\uninstall.cmd -Silent [-KeepUserData]
 
 - 安装时把当前包复制到安装目录；运行过播放器产生的
   `portable_config\_cache`、`saved-props.json`、`update-check-state.json`
-  不会复制。
+  以及 `.playkit\update-status.json` / `.playkit\updater.log` 不会复制。
+- 覆盖安装前，如果目标已有 `playkit-version.json`，安装器会先调用旧安装目录中的
+  `updater\playkit-updater.exe capture`，把用户对生成配置的直接
+  编辑保存为 `portable_config\user\patches\auto\` 下的 patch；捕获失败会中止
+  安装，不会静默覆盖配置。旧版本没有 helper 时只记录警告，并保留
+  `portable_config\user`。
+- 复制完成后调用新包的 `repair`，以新官方配置重建 `.playkit\official` 与
+  `.playkit\generated`，重新应用手动/自动 patch 和用户脚本、字体、script-opts。
+  因此安装器覆盖安装与播放器内自动更新的结果一致。
+- 升级时重新运行安装程序即可覆盖程序文件；`portable_config\user` 与用户数据
+  不会被删除。安装目录中额外的用户文件不会被删除。
 - 注册内容对应原版 `mpv.com --register` / `umpv-install.bat` 的用户级部分：
   ProgID（默认动词 `play`）、`Applications\mpv.exe`、逐扩展名
   `OpenWithProgids`、`SupportedTypes`、`SystemFileAssociations\video/audio`
@@ -62,7 +72,6 @@ installer\windows\uninstall.cmd -Silent [-KeepUserData]
   `App Paths\mpv.exe`（可执行文件都叫 `mpv.exe`）：后安装者会覆盖先安装者
   的用户级注册，卸载会移除本安装写入的这些项。ProgID 使用独立的
   `mpv-playkit`，不会覆盖原版的 `io.mpv.*` ProgID。
-- 升级时重新运行安装程序即可覆盖程序文件；安装目录中额外的用户文件不会被删除。
 - 文件关联的扩展名列表从 `portable_config\script-opts\uosc.conf` 的
   `video_types` / `audio_types` / `image_types` / `subtitle_types` 读取。
 

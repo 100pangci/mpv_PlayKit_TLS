@@ -16,7 +16,8 @@ uosc 界面与菜单、完整快捷键、时间轴缩略图、属性保存、统
 - uosc（构建时仅对 `main.lua` 应用自动 UI 缩放补丁，其余文件保持上游）与
   LXGW WenKai Mono Lite 字体
 - 播放器配置、profiles、按键菜单与原创本地脚本
-- 播放器内更新检测器
+- 播放器内自动更新：Rust 更新器负责下载、校验、patch 和事务式替换
+- 用户配置 patch 层（`portable_config/user/`），更新时自动重新应用
 - GitHub Actions 每月自动检查、构建与发布
 
 不包含 GLSL shader、VapourSynth、AI 超分/补帧、CUDA、TensorRT、DirectML 或模型。
@@ -67,9 +68,17 @@ GitHub Actions 每月 1 日 05:17 UTC 检查上游，采用事务式流程：
   `mpv_commit`。Windows（shinchiro）与 Linux（pkgforge-dev）可能使用不同的 mpv
   提交，发布说明中按平台分列，不再只写一个模糊的 mpv 版本。
 
-播放器内的更新检测器只提示新版本，不会下载或覆盖播放器。关闭方法见
-[更新检测器文档](docs/update-checker.md)；`enabled=no` 时脚本不会发起任何网络请求。
-检测器通过 GitHub 公开 API 读取最新 Release；若仓库以后改为私有，匿名检测会
+播放器内的更新器会检测新版本，并在用户确认后下载完整安装包、校验 SHA-256、
+展开到同级 staging 目录、重新应用 `user/` 层的配置 patch，等 mpv 退出后再
+事务式交换目录。旧版本保留为 `.previous`，可从菜单回滚。更新只安装完整的
+新 PlayKit，不会对旧安装目录做增量补丁。
+
+`enabled=no` 时脚本不会发起任何网络请求，也不会启动更新器；`install_enabled=no`
+可以只关闭安装而保留检查。用户配置以语义 patch 保存在
+`portable_config/user/patches/`，新官方配置整体替换后 patch 会自动重新应用。
+详见 [自动更新文档](docs/updater.md) 与 [用户配置 Patch](docs/user-patches.md)。
+
+检查器通过 GitHub 公开 API 读取最新 Release；若仓库以后改为私有，匿名检测会
 失败并只记录日志，菜单中的“打开 Release 页面”仍会回退到最新发布页。
 
 ## 仓库结构
@@ -81,7 +90,7 @@ config/
   linux/             Linux 平台配置
 scripts/local/       本项目原创或重写的 Lua（构建时复制到 scripts/ 根目录）
 installer/           可选的 Windows 安装/卸载脚本与 Linux 安装接口占位
-updater/             播放器内更新检测器
+updater/            播放器内更新检测 Lua 与 Rust 更新器 helper（updater/helper/）
 manifests/           上游来源、资产匹配规则、安装规则
 sources.lock.json    当前固定的上游版本与哈希
 build/               解析、下载、解包、组装、打包、校验与发布工具
@@ -92,11 +101,16 @@ docs/                架构、上游、更新检测器与许可证处置说明
 
 ## 本地构建
 
-要求 Python 3.11+、7-Zip；Linux 还需要 `squashfs-tools`（解包 AppImage）。
-Windows 上可用 `SEVEN_ZIP_PATH` 指定 `7z.exe`。
+要求 Python 3.11+、7-Zip、Rust 1.85+（含 Cargo）；Linux 还需要
+`squashfs-tools`（解包 AppImage）。Windows 上可用 `SEVEN_ZIP_PATH` 指定
+`7z.exe`。Linux 发行包使用 `x86_64-unknown-linux-musl` 静态构建，需先
+`rustup target add x86_64-unknown-linux-musl` 并安装 `musl-tools`。
 
 ```sh
 python -m pip install -r requirements.txt
+
+# 0. 构建 Rust 更新器（Windows 产物为 playkit-updater.exe）
+python -m build.helper --platform windows-x64
 
 # 1. 解析上游并写 lock（也可先用仓库中已有的 sources.lock.json）
 python -m build.resolve --output sources.lock.json
@@ -111,6 +125,7 @@ python -m build.assemble \
   --lock sources.lock.json \
   --work .work \
   --out dist/stage/windows-x64 \
+  --helper dist/updater/windows-x64/playkit-updater.exe \
   --repository 100pangci/mpv_PlayKit_TLS
 
 # 4. 冒烟测试、打包、校验
@@ -142,7 +157,8 @@ Ubuntu runner。
 
 发布前会检查：必需文件、禁用路径（基线文件、shader、VapourSynth、模型、
 自更新/yt-dlp 下载 hook）、`update-check` 的联网门禁顺序、压缩包顶层目录与
-SHA-256。任何一项失败都不会发布。
+SHA-256，以及更新器清单（`playkit-inventory.json`、`.playkit/state.json`、
+helper 版本/大小/SHA-256、Linux 可执行位）。任何一项失败都不会发布。
 
 ## 许可证
 
@@ -158,5 +174,7 @@ SHA-256。任何一项失败都不会发布。
 - [架构与构建流程](docs/architecture.md)
 - [上游来源与更新规则](docs/upstreams.md)
 - [播放器内更新检测器](docs/update-checker.md)
+- [自动更新与事务式安装](docs/updater.md)
+- [用户配置 Patch](docs/user-patches.md)
 - [Lua 处置清单](docs/lua-disposition.md)
 - [基线审计摘要](docs/baseline-audit.md)

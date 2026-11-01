@@ -21,6 +21,7 @@ from .common import (
     sha256_file,
     write_json,
 )
+from .helper import helper_version
 from .upstream import lock_hash
 
 # Files that are generated next to the published assets but are not themselves
@@ -187,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
                 fail(f"{identifier}: packaged commit differs from lock on {platform}")
 
     manifest = {
-        "schema": 1,
+        "schema": 2,
         "playkit_version": args.version,
         "tag": args.tag,
         "repository": args.repository,
@@ -197,6 +198,13 @@ def main(argv: list[str] | None = None) -> int:
         "upstream_lock_sha256": lock_hash(lock),
         "components": components,
         "platforms": platforms,
+        "updater": {
+            "protocol": 1,
+            "min_helper_version": helper_version(),
+            "patch_schema": 1,
+            "user_layer": "portable_config/user",
+            "state_dir": "portable_config/.playkit",
+        },
     }
     write_json(out_dir / "manifest.json", manifest)
 
@@ -233,6 +241,16 @@ def main(argv: list[str] | None = None) -> int:
         )
     notes_lines.extend(
         [
+            "",
+            "## In-player updates",
+            "",
+            "Each archive includes `updater/playkit-updater` (Windows: `.exe`).",
+            "The player checks for new releases but installs only after the user",
+            "confirms. The updater verifies `SHA256SUMS`, `manifest.json` and the",
+            "archive before staging a new installation, then preserves the user",
+            "layer under `portable_config/user/` and re-applies user patches to",
+            "the new official configuration. The previous installation remains",
+            "available for rollback.",
             "",
             "## Assets",
             "",

@@ -13,7 +13,8 @@
 | `config/windows/` | `platform.conf`（WASAPI、IME）与 `ytdl_hook.conf` |
 | `config/linux/` | `platform.conf`（PipeWire/PulseAudio/ALSA）与 `ytdl_hook.conf` |
 | `scripts/local/` | 本项目原创 Lua（`idle-brand`、`save_global_props`、`input_plus`、`thumbfast`）；构建时复制到包内 `portable_config/scripts/` 根目录 |
-| `updater/update-check.lua` | 播放器内更新检测器；构建时同样复制到 scripts 根目录 |
+| `updater/update-check.lua` | 播放器内更新检测与安装界面；构建时同样复制到 scripts 根目录 |
+| `updater/helper/` | Rust 更新器（下载、校验、patch、事务交换）；构建时放入安装目录根部 `updater/` |
 | `installer/` | Windows 安装/卸载脚本与图标；Linux 安装接口占位（未实现）；构建时原样复制到包内 |
 | `manifests/*.yml` | 上游仓库、Release 选择方式、资产正则、许可证、解包与安装规则 |
 | `sources.lock.json` | 解析后的固定版本、URL、SHA-256；每月由工作流刷新 |
@@ -41,8 +42,11 @@ build.decide ── 比较最新 Release 的 manifest.json
 build.fetch ── 两个平台分别下载资产与许可证，校验 lock 中的 SHA-256
       │
       ▼
+build.helper ── cargo build --release --locked；Windows 静态 CRT，Linux musl
+      │
+      ▼
 build.assemble ── 按平台解包、安装、生成 playkit-version.json / manifest.json
-      │            （Linux 额外解包 AppImage、删除自更新/yt-dlp 下载 hook、生成启动器）
+      │            + .playkit 状态、playkit-inventory.json、updater helper
       ▼
 build.smoke ── mpv --version + 配置加载播放 + yt-dlp --version
       │
@@ -83,6 +87,29 @@ gh release create --target <final_sha> ── 仅在此前全部成功时执行
 因此不存在“检查时是 A、构建时是 B、Release 记录成 C”的 TOCTOU 窗口：解析结果
 只解析一次，构建和发布都使用同一份 lock 与同一个提交。
 
+## 播放器内自动更新
+
+安装包内的 Rust helper 与 Lua 检测器共同完成更新。Lua 只负责检查 Release、
+显示 UI 和以结构化参数启动 helper；任何文件修改都在 helper 中完成。
+
+更新遵循“安装完整新版本，再应用用户层”的模型：
+
+1. 从固定仓库的 Release 下载 `manifest.json`、`SHA256SUMS` 与平台归档。
+2. 用 `SHA256SUMS` 校验归档；manifest 中的版本、tag、仓库、平台资产名、大小
+   和 `updater` 协议必须匹配；helper 版本不能低于 `min_helper_version`。
+3. 在安装目录之外的临时目录解压，拒绝路径穿越、绝对路径和链接逃逸。
+4. 校验包内 `playkit-version.json`、`manifest.json`、`playkit-inventory.json`
+   的完整文件哈希，以及 `.playkit/state.json` 记录的官方基线。
+5. 等待 mpv 退出后，在同级 staging 目录复制新包、保留运行时状态、迁移
+   `portable_config/user/`、应用手动与自动 patch。
+6. 用两次重命名完成交换：`current → current.previous`，
+   `staging → current`。失败时尝试恢复；成功后最多保留 current 与 previous。
+
+`.playkit/official/` 保存本版本官方配置基线，`.playkit/generated/` 保存应用
+patch 后最后写入的快照，二者用于捕获用户直接编辑和校验状态。用户 patch 是
+语义差异（set/remove/append），不是 unified diff；未出现在 patch 中的键跟随
+新官方配置。详见 [自动更新](updater.md) 与 [用户配置 Patch](user-patches.md)。
+
 ## 确定性
 
 - 资产由 `sources.lock.json` 固定版本与哈希；下载后再次校验。许可证文本同样固定
@@ -119,9 +146,11 @@ LICENSE_PROVENANCE.md
 
 `build/` 包含会改变最终发行包内容、结构、uosc 补丁、许可证索引和发布元数据的
 构建源码；`.github/workflows/build.yml` 决定实际执行的组装/打包命令和参数，
-因此也参与哈希。`tests/`、`__pycache__/`、`.pyc/.pyo` 与 Python 工具缓存不参与
-哈希：纯测试或本地缓存变化不会触发正式 Release。任何上述输入的变化
-都会改变 `inputs_hash`，从而触发下一次月度发布，即使上游没有变化。
+因此也参与哈希。`updater/` 同时包含 Lua 和 Rust helper 源码（`Cargo.toml`、
+`Cargo.lock`、`src/`、`tests/`）；`updater/helper/target/` 是本地编译缓存，
+被 `build/inputs.py` 和 `.gitignore` 排除。`tests/`、`__pycache__/`、`.pyc/.pyo`
+与 Python 工具缓存不参与哈希：纯测试或本地缓存变化不会触发正式 Release。任何
+上述输入的变化都会改变 `inputs_hash`，从而触发下一次月度发布，即使上游没有变化。
 
 ## uosc UI 缩放补丁
 
@@ -150,7 +179,14 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 
 冒烟测试把 `saved-props.json`、缩略图缓存、watch-later、ICC/着色器缓存全部重定向
 到临时目录，避免把测试产生的状态文件打进发布包。`build/verify` 也会拒绝
-`_cache/`、`saved-props.json` 和 `update-check-state.json`。
+`_cache/`、`saved-props.json`、`update-check-state.json`、`.playkit/update-status.json`
+和 `.playkit/updater.log`。
+
+`.playkit/state.json`、`.playkit/official/`、`.playkit/generated/` 和
+`playkit-inventory.json` 是**有意随包发布**的更新状态：全新安装的官方基线与生成
+配置字节相同，用户层为空。更新时 helper 保留 `saved-props.json`、
+`update-check-state.json`、`watch_later/`、`_cache/watch_later/` 和
+`_cache/command_history.txt`，其余运行缓存丢弃。
 
 ## 平台差异
 
@@ -160,6 +196,8 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
   `mpv.exe`、`mpv.com`、`d3dcompiler_43.dll`。
 - 包根目录即播放器目录；`portable_config/` 与 `mpv.exe` 同级。
 - `yt-dlp.exe` 放在包根目录。
+- 更新器为安装目录根部的 `updater/playkit-updater.exe`，使用 MSVC 静态 CRT
+  构建，不依赖系统 VC++ 运行库。
 
 ### Linux
 
@@ -171,18 +209,26 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 - 生成的 `mpv-playkit` 启动器设置 `DISABLE_AUTO_UPDATES=1`，用
   `--config-dir` 指向包内 `portable_config/`，并执行 `mpv/AppRun`。
 - `yt-dlp` 放在包根目录并加入启动器的 `PATH`。
+- 更新器为安装目录根部的 `updater/playkit-updater`，使用
+  `x86_64-unknown-linux-musl` 静态链接；打包时设置可执行位并在压缩包中保留。
 
 ## 校验门禁
 
 `build.verify` 与 `build.assemble` 会在发布前检查：
 
-1. 必需文件存在（两个平台的播放器、配置、脚本、字体、manifest、许可证索引）。
+1. 必需文件存在（两个平台的播放器、配置、脚本、字体、manifest、许可证索引、
+   `playkit-inventory.json`、`.playkit/state.json`、helper）。
 2. 禁用路径不存在：基线目录、shader、VapourSynth、历史 `thumb_engine`、模型、
    AppImage 自更新/yt-dlp 下载 hook、运行时缓存和状态文件。
 3. `mpv.conf` 中 `~~/` 引用存在。
 4. `update-check.lua` 的 `enabled=no` 门禁位于任何 subprocess 调用之前。
-5. 压缩包顶层目录正确、无路径穿越、必需成员齐全、SHA-256 匹配。
-6. `manifest.json` 的版本和平台与构建参数一致。
+5. 更新器元数据：`protocol=1`、`patch_schema=1`、固定的 `user_layer` /
+   `state_dir`、helper 资产名/版本/SHA-256/大小；Linux 上 helper 必须可执行。
+6. `playkit-inventory.json` 覆盖包内全部官方文件，哈希匹配；官方基线与生成配置
+   相同；每个文件都可通过路径安全检查。
+7. 压缩包顶层目录正确、无路径穿越、必需成员齐全、SHA-256 匹配。
+8. `manifest.json` 的版本和平台与构建参数一致（Release manifest schema 2；
+   旧版 schema 1 仍可解析，新增字段是可选扩展）。
 
 任何一步抛错都会让工作流失败，后续 release 作业不会运行。
 
@@ -191,7 +237,7 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 | 工作流 | 触发 | 行为 |
 | --- | --- | --- |
 | `monthly-update.yml` | 每月 1 日 05:17 UTC；手动 | resolve → 候选 artifact → build → commit-lock → release |
-| `build.yml` | push、PR、手动、被调用 | 单元测试 + Windows/Linux 构建、冒烟、打包、校验；被调用时先安装并校验候选 lock |
+| `build.yml` | push、PR、手动、被调用 | Python 测试 + Rust 更新器测试（Ubuntu/Windows）+ Windows/Linux 构建、冒烟、打包、校验；被调用时先安装并校验候选 lock |
 | `release.yml` | 被 `monthly-update.yml` 调用 | 校验候选 lock 字节，从 Actions 缓存取回两个平台产物，生成发布元数据并在最终提交上创建 Release |
 
 候选 lock 通过 workflow artifact 在 resolve、两个平台构建、commit-lock 与
@@ -199,7 +245,9 @@ release 之间传递；每个消费者都校验 resolve 记录的 `lock_sha256`�
 构建产物通过 Actions 缓存（不是 artifact 存储）传递给 release 作业，避免 artifact
 存储配额限制。缓存键包含 `run_id`、`run_attempt` 与候选 lock 的 SHA-256。
 
-`build.yml` 中两个平台作业并行；`release.yml` 只在两者都成功后运行。
+`build.yml` 中两个平台作业并行；`release.yml` 只在两者都成功后运行。Rust 更新器
+在两个操作系统上执行 `cargo test --all-targets`、`cargo fmt --check` 和
+`cargo clippy -D warnings`；任一失败会阻止平台构建与发布。
 
 ## 失败语义
 

@@ -28,8 +28,10 @@ from .common import (
     write_json,
 )
 from .extract import DEFAULT_REMOVED_HOOKS, extract_component, hook_is_removed
+from .helper import default_output, helper_filename, helper_version
 from .inputs import compute_inputs_hash
 from .patch_uosc import patch_uosc
+from .userstate import write_inventory, write_package_state
 
 LAUNCHER = """#!/bin/sh
 # mpv PlayKit launcher for Linux.
@@ -59,12 +61,20 @@ Linux 安装器接口已预留但尚未实现，详见 installer/README.md。
 portable_config/ 内是完整配置。本项目原创部分按 GPL-3.0-or-later 分发，
 见 LICENSE 与 NOTICE；第三方组件保留各自许可证，见 THIRD_PARTY.md 与 licenses/。
 
-更新检查
-========
-播放器默认会在启动后检查 PlayKit 的新版本，但不会自动下载或覆盖自身。
+更新检查与自动安装
+==================
+播放器默认会在启动后检查 PlayKit 的新版本，但不会在后台自动安装。
+菜单“更新”中可以检查、下载并安装、保存当前配置修改或回滚到上一版本。
+安装由 updater/playkit-updater 独立完成：先下载并校验完整安装包，等播放器
+退出后再交换目录。任何校验失败都会中止更新，当前安装保持不变。
+
+用户配置放在 portable_config/user/。直接编辑官方配置也可以：更新器会把你
+的修改捕获成 user/patches/auto/ 下的语义 patch，再应用到新版本的干净官方
+配置上。详细说明见 portable_config/user/README.md。
+
 永久关闭：把 portable_config/script-opts/update-check.conf 里的 enabled 改为 no，
 或删除 portable_config/update-check-state.json 后使用“关闭更新检查”菜单项。
-关闭后不会发起任何联网请求。
+关闭后不会发起任何联网请求，也不会启动更新器。
 
 本发行包不包含 GLSL shader、VapourSynth、AI 模型或 CUDA/TensorRT 组件。
 """
@@ -198,6 +208,24 @@ def copy_licenses(stage: Path, work: Path, fetched: dict[str, Any], lock: dict[s
             copy_file(path, stage / name)
 
 
+def copy_helper(stage: Path, platform: str, source: Path) -> Path:
+    """Place the Rust updater inside the package.
+
+    The helper must live outside portable_config: it replaces the install
+    directory while it runs, and the detached worker is a copy in the system
+    temp directory.
+    """
+    if not source.is_file():
+        fail(
+            f"missing updater helper: {source}; run "
+            f"`python -m build.helper --platform {platform}` first"
+        )
+    target = stage / "updater" / helper_filename(platform)
+    copy_file(source, target, executable=platform == "linux-x64")
+    log(f"installed updater helper: {target.relative_to(stage)}")
+    return target
+
+
 def write_metadata(
     stage: Path,
     *,
@@ -209,6 +237,7 @@ def write_metadata(
     inputs_hash: str,
     fetched: dict[str, Any],
     lock: dict[str, Any],
+    helper: Path,
 ) -> None:
     components: dict[str, Any] = {}
     for identifier, entry in sorted(fetched.items()):
@@ -248,6 +277,19 @@ def write_metadata(
     if not mpv_info["version"] or not mpv_info["commit"]:
         fail(f"{platform}: mpv component {mpv_identifier} has no version/commit")
 
+    updater = {
+        "protocol": 1,
+        "min_helper_version": helper_version(),
+        "patch_schema": 1,
+        "user_layer": "portable_config/user",
+        "state_dir": "portable_config/.playkit",
+    }
+    helper_info = {
+        "version": helper_version(),
+        "asset": helper_filename(platform),
+        "size": helper.stat().st_size,
+        "sha256": sha256_file(helper),
+    }
     version_info = {
         "schema": 1,
         "playkit_version": version,
@@ -258,6 +300,8 @@ def write_metadata(
         "inputs_hash": inputs_hash,
         "mpv": mpv_info,
         "components": components,
+        "updater": updater,
+        "helper": helper_info,
     }
     write_json(stage / "playkit-version.json", version_info)
 
@@ -292,6 +336,15 @@ def verify_stage_minimum(stage: Path, platform: str) -> None:
         portable / "scripts" / "thumbfast.lua",
         stage / "manifest.json",
         stage / "playkit-version.json",
+        stage / "playkit-inventory.json",
+        portable / ".playkit" / "state.json",
+        portable / ".playkit" / "official" / "mpv.conf",
+        portable / ".playkit" / "official" / "input.conf",
+        portable / ".playkit" / "official" / "profiles.conf",
+        portable / ".playkit" / "official" / "platform.conf",
+        portable / ".playkit" / "generated" / "mpv.conf",
+        portable / "user" / "README.md",
+        stage / "updater" / helper_filename(platform),
         stage / "LICENSE",
         stage / "NOTICE",
         stage / "installer" / "README.md",
@@ -332,6 +385,7 @@ def verify_stage_minimum(stage: Path, platform: str) -> None:
         make_executable(stage / "mpv" / "AppRun")
         make_executable(stage / "mpv" / "AppRun.sh")
         make_executable(stage / "yt-dlp")
+        make_executable(stage / "updater" / helper_filename(platform))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -345,6 +399,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repository", default=None)
     parser.add_argument("--built-at", default=None)
     parser.add_argument("--source-sha", default=os.environ.get("GITHUB_SHA", "local"))
+    parser.add_argument(
+        "--helper",
+        type=Path,
+        default=None,
+        help="prebuilt playkit-updater binary (default: dist/updater/<platform>/)",
+    )
     args = parser.parse_args(argv)
 
     project, components = load_manifests(args.manifests)
@@ -400,17 +460,26 @@ def main(argv: list[str] | None = None) -> int:
         make_executable(launcher)
 
     copy_licenses(stage, work, fetched, lock)
+    helper_path = copy_helper(
+        stage,
+        args.platform,
+        (args.helper or default_output(args.platform)).resolve(),
+    )
+    built_at = args.built_at or now_iso()
     write_metadata(
         stage,
         version=args.version,
         platform=args.platform,
         repository=repository,
-        built_at=args.built_at or now_iso(),
+        built_at=built_at,
         source_sha=args.source_sha,
         inputs_hash=compute_inputs_hash(),
         fetched=fetched,
         lock=lock,
+        helper=helper_path,
     )
+    write_package_state(stage, args.version, args.platform, built_at)
+    write_inventory(stage)
     verify_stage_minimum(stage, args.platform)
     log(f"assembled {args.platform} at {stage} ({human_size(sum(p.stat().st_size for p in stage.rglob('*') if p.is_file()))})")
     return 0

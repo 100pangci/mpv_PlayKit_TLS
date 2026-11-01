@@ -124,6 +124,19 @@ def main(argv: list[str] | None = None) -> int:
 
         ytdlp_version = run_test([ytdlp, "--version"], cwd=stage, timeout=args.timeout, env=env)
         log(f"yt-dlp {ytdlp_version.strip().splitlines()[0] if ytdlp_version.strip() else '--version ok'}")
+
+        # The updater is a separate native executable.  Running --version
+        # proves its static runtime and DLL dependencies are satisfied before
+        # it is shipped to users.
+        updater = stage / "updater" / (
+            "playkit-updater.exe" if args.platform == "windows-x64" else "playkit-updater"
+        )
+        if not updater.is_file():
+            fail(f"updater helper is missing: {updater}")
+        updater_version = run_test([updater, "--version"], cwd=stage, timeout=args.timeout, env=env)
+        if "playkit-updater" not in updater_version:
+            fail(f"unexpected updater version output: {updater_version!r}")
+        log(updater_version.strip().splitlines()[0])
     log(f"smoke tests passed for {args.platform}")
     return 0
 

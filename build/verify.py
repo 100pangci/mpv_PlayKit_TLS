@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .common import PLATFORM_ARCHIVE, PLATFORM_OS, fail, log, read_json, sha256_file
 from .extract import DEFAULT_REMOVED_HOOKS, hook_is_removed
+from .userstate import verify_package_state
 
 REQUIRED = [
     "portable_config/mpv.conf",
@@ -25,6 +26,17 @@ REQUIRED = [
     "portable_config/scripts/input_plus.lua",
     "portable_config/scripts/thumbfast.lua",
     "portable_config/fonts/LXGWWenKaiMonoLite-Regular.ttf",
+    "portable_config/.playkit/state.json",
+    "portable_config/.playkit/official/mpv.conf",
+    "portable_config/.playkit/official/input.conf",
+    "portable_config/.playkit/official/profiles.conf",
+    "portable_config/.playkit/official/platform.conf",
+    "portable_config/.playkit/generated/mpv.conf",
+    "portable_config/.playkit/generated/input.conf",
+    "portable_config/.playkit/generated/profiles.conf",
+    "portable_config/.playkit/generated/platform.conf",
+    "portable_config/user/README.md",
+    "playkit-inventory.json",
     "manifest.json",
     "playkit-version.json",
     "licenses/INDEX.json",
@@ -37,6 +49,7 @@ REQUIRED = [
 WINDOWS_REQUIRED = [
     "mpv.exe",
     "yt-dlp.exe",
+    "updater/playkit-updater.exe",
     "installer/windows/install.ps1",
     "installer/windows/uninstall.ps1",
     "installer/windows/install.cmd",
@@ -47,6 +60,7 @@ LINUX_REQUIRED = [
     "mpv/AppRun",
     "mpv-playkit",
     "yt-dlp",
+    "updater/playkit-updater",
     "installer/linux/install.sh",
     "installer/linux/mpv-playkit.desktop.in",
     "installer/linux/mpv-playkit.svg",
@@ -89,6 +103,8 @@ FORBIDDEN_PARTS = {
     "_cache",
     "saved-props.json",
     "update-check-state.json",
+    "update-status.json",
+    "updater.log",
 }
 FORBIDDEN_SUFFIXES = {".vpy", ".onnx", ".glsl"}
 FORBIDDEN_PARTS_FOLDED = frozenset(part.casefold() for part in FORBIDDEN_PARTS)
@@ -216,6 +232,31 @@ def update_check_gate_ok(text: str) -> bool:
     return gate < calls[0].start()
 
 
+def check_updater_metadata(stage: Path, manifest: dict, platform: str) -> None:
+    updater = manifest.get("updater") or {}
+    if updater.get("protocol") != 1:
+        fail("manifest updater.protocol must be 1")
+    if updater.get("patch_schema") != 1:
+        fail("manifest updater.patch_schema must be 1")
+    if updater.get("user_layer") != "portable_config/user":
+        fail("manifest updater.user_layer must be portable_config/user")
+    if updater.get("state_dir") != "portable_config/.playkit":
+        fail("manifest updater.state_dir must be portable_config/.playkit")
+    helper = manifest.get("helper") or {}
+    helper_name = "playkit-updater.exe" if platform == "windows-x64" else "playkit-updater"
+    path = stage / "updater" / helper_name
+    if helper.get("asset") != helper_name:
+        fail(f"manifest helper.asset must be {helper_name}")
+    if not isinstance(helper.get("version"), str) or not helper["version"]:
+        fail("manifest helper.version is missing")
+    if helper.get("sha256") != sha256_file(path):
+        fail("manifest helper.sha256 does not match the packaged updater")
+    if helper.get("size") != path.stat().st_size:
+        fail("manifest helper.size does not match the packaged updater")
+    if platform == "linux-x64" and not (path.stat().st_mode & stat.S_IXUSR):
+        fail("Linux updater helper is not executable")
+
+
 def check_stage(stage: Path, platform: str, version: str | None) -> None:
     required = list(REQUIRED)
     if platform == "windows-x64":
@@ -275,6 +316,8 @@ def check_stage(stage: Path, platform: str, version: str | None) -> None:
     check_installer(stage, platform)
     check_licenses(stage, platform)
     check_manifest_license_files(stage, manifest)
+    check_updater_metadata(stage, manifest, platform)
+    verify_package_state(stage, manifest.get("playkit_version", ""), platform)
     log(f"verified stage {stage} ({platform})")
 
 

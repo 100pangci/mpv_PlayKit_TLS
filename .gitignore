@@ -1,6 +1,7 @@
 # Build workspace and outputs
 .work/
 dist/
+updater/helper/target/
 
 # Python
 __pycache__/

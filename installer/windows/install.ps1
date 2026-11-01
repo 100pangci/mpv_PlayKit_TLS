@@ -69,19 +69,54 @@ function Get-RunningMpv {
     }
 }
 
+function Invoke-Updater {
+    param([string]$Root, [string[]]$Arguments)
+    $updater = Join-Path $Root 'updater\playkit-updater.exe'
+    if (-not (Test-Path -LiteralPath $updater)) {
+        return $false
+    }
+    & $updater @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "更新器执行失败（退出码 $LASTEXITCODE）：$($Arguments -join ' ')"
+    }
+    return $true
+}
+
 function Copy-Package {
     param([string]$Source, [string]$Target)
     $sourceFull = [IO.Path]::GetFullPath($Source).TrimEnd('\')
     $targetFull = [IO.Path]::GetFullPath($Target).TrimEnd('\')
     New-Item -ItemType Directory -Force -Path $targetFull | Out-Null
     if ($sourceFull -ieq $targetFull) { return }
+
+    # Capture direct edits before the old official configuration is replaced.
+    # The new package is then copied over the installation, preserving user/
+    # (and runtime state) and re-applying the captured patches afterwards.
+    if (Test-Path -LiteralPath (Join-Path $targetFull 'playkit-version.json')) {
+        Write-Log '正在保存旧版本中的用户配置修改...'
+        try {
+            $captured = Invoke-Updater -Root $targetFull -Arguments @('capture', '--root', $targetFull, '--quiet')
+            if (-not $captured) {
+                Write-Log '旧版本没有更新器，无法捕获直接编辑；将保留 portable_config\user。'
+            }
+        } catch {
+            throw "无法保存旧版本的用户配置，安装已停止：$($_.Exception.Message)"
+        }
+    }
+
     Get-ChildItem -LiteralPath $sourceFull -Force | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination $targetFull -Recurse -Force
     }
-    foreach ($relative in @('portable_config\_cache', 'portable_config\saved-props.json', 'update-check-state.json')) {
+    # Runtime status belongs to this installation, not to the package.  Keep
+    # saved properties, watch-later data and update-check state; only remove
+    # files that would show a stale update result.
+    foreach ($relative in @(
+        'portable_config\.playkit\update-status.json',
+        'portable_config\.playkit\updater.log'
+    )) {
         $path = Join-Path $targetFull $relative
         if (Test-Path -LiteralPath $path) {
-            Remove-Item -LiteralPath $path -Recurse -Force
+            Remove-Item -LiteralPath $path -Force
         }
     }
 }
@@ -286,6 +321,15 @@ function Install-PlayKit {
 
     Write-Log '正在复制文件...'
     Copy-Package -Source $Source -Target $Target
+
+    # A fresh package starts from its official configuration.  Re-apply the
+    # preserved user patches (or the patches captured above) to it.
+    if (Test-Path -LiteralPath (Join-Path $Target 'updater\playkit-updater.exe')) {
+        Write-Log '正在应用用户配置 patch...'
+        Invoke-Updater -Root $Target -Arguments @('repair', '--root', $Target, '--quiet') | Out-Null
+    } else {
+        throw '安装包缺少 updater\playkit-updater.exe，无法应用用户配置。'
+    }
 
     $exe = Join-Path $Target 'mpv.exe'
     $icon = Join-Path $Target 'installer\windows\mpv-playkit.ico'
