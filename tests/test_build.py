@@ -1081,6 +1081,28 @@ class PlatformMpvTests(unittest.TestCase):
             mpv_for_platform({"components": {}}, "windows-x64")
 
 
+class ScriptOptsTests(unittest.TestCase):
+    def test_console_history_persists_under_cache(self) -> None:
+        text = (
+            ROOT / "config" / "common" / "script-opts" / "commands.conf"
+        ).read_text(encoding="utf-8")
+        options = {}
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            options[key.strip()] = value.strip()
+        # commands.lua ignores history_path unless persist_history is enabled.
+        self.assertEqual(options.get("persist_history"), "yes")
+        self.assertEqual(options.get("history_path"), "~~/_cache/command_history.txt")
+        # The updater must preserve the same runtime file across updates.
+        updater = (
+            ROOT / "updater" / "helper" / "src" / "update.rs"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"_cache/command_history.txt"', updater)
+
+
 class LicenseVerifyTests(unittest.TestCase):
     def _entry(self, **overrides) -> dict:
         entry = {
