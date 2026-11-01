@@ -1532,6 +1532,11 @@ class WorkflowTests(unittest.TestCase):
                 (ROOT / "config" / "common" / "input.conf").read_text(encoding="utf-8"),
             )
 
+    def test_commit_lock_installs_python_dependencies(self) -> None:
+        steps = self._workflow("monthly-update.yml")["jobs"]["commit-lock"]["steps"]
+        commands = " ".join(str(step.get("run", "")) for step in steps)
+        self.assertIn("pip install -r requirements.txt", commands)
+
     def test_rust_updater_tests_run_on_both_platforms(self) -> None:
         jobs = self._workflow("build.yml")["jobs"]
         self.assertIn("rust-tests", jobs)
