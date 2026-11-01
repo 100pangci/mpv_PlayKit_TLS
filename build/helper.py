@@ -9,6 +9,7 @@ from .common import PLATFORM_OS, ROOT, fail, human_size, log, make_executable, r
 
 HELPER_CRATE = ROOT / "updater" / "helper"
 HELPER_NAME = "playkit-updater"
+UMPV_NAME = "umpv"
 # The release that introduces schema-2 patches still ships a helper whose
 # version is 1.1.0, but installations running 1.0.0 must be able to install it
 # first.  Keep the advertised minimum at 1.0.0 for this bridge release; the new
@@ -28,8 +29,20 @@ def helper_filename(platform: str) -> str:
     fail(f"unknown platform: {platform}")
 
 
+def umpv_filename(platform: str) -> str:
+    if platform == "windows-x64":
+        return f"{UMPV_NAME}.exe"
+    if platform == "linux-x64":
+        return UMPV_NAME
+    fail(f"unknown platform: {platform}")
+
+
 def default_output(platform: str) -> Path:
     return ROOT / "dist" / "updater" / platform / helper_filename(platform)
+
+
+def default_umpv_output(platform: str) -> Path:
+    return ROOT / "dist" / "updater" / platform / umpv_filename(platform)
 
 
 def helper_version() -> str:
@@ -46,7 +59,7 @@ def helper_version() -> str:
     return version
 
 
-def build(platform: str, target: str | None, target_dir: Path) -> Path:
+def build(platform: str, target: str | None, target_dir: Path) -> tuple[Path, Path]:
     if platform not in PLATFORM_OS:
         fail(f"unknown platform: {platform}")
     target = target or DEFAULT_TARGETS[platform]
@@ -74,10 +87,13 @@ def build(platform: str, target: str | None, target_dir: Path) -> Path:
         env=env,
         timeout=1800,
     )
-    binary = target_dir.resolve() / target / "release" / helper_filename(platform)
-    if not binary.is_file():
-        fail(f"cargo did not produce {binary}")
-    return binary
+    release = target_dir.resolve() / target / "release"
+    helper = release / helper_filename(platform)
+    umpv = release / umpv_filename(platform)
+    for binary in (helper, umpv):
+        if not binary.is_file():
+            fail(f"cargo did not produce {binary}")
+    return helper, umpv
 
 
 def verify_binary(binary: Path, version: str) -> None:
@@ -89,36 +105,66 @@ def verify_binary(binary: Path, version: str) -> None:
         fail(f"unexpected updater --version output: {output!r}")
 
 
+def verify_umpv(binary: Path, platform: str) -> None:
+    if binary.stat().st_size < 32 * 1024:
+        fail(f"umpv binary looks too small: {binary}")
+    # Windows builds use the GUI subsystem, so --version has no captured
+    # output there; the exit status still proves that the binary starts.
+    process = run([binary, "--version"], cwd=binary.parent, timeout=60)
+    if process.returncode != 0:
+        fail(f"umpv --version failed: {process.returncode}")
+    if platform == "linux-x64" and "umpv" not in (process.stdout or ""):
+        fail(f"unexpected umpv --version output: {(process.stdout or '')!r}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build the Rust update helper")
     parser.add_argument("--platform", required=True, choices=sorted(PLATFORM_OS))
     parser.add_argument("--target", default=None, help="Rust target triple override")
     parser.add_argument("--target-dir", type=Path, default=ROOT / ".work" / "cargo-target")
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--umpv-out", type=Path, default=None)
     parser.add_argument(
         "--binary",
         type=Path,
         default=None,
         help="Copy a prebuilt binary instead of invoking cargo (packaging tests)",
     )
+    parser.add_argument(
+        "--umpv-binary",
+        type=Path,
+        default=None,
+        help="Copy a prebuilt umpv binary instead of invoking cargo (packaging tests)",
+    )
     args = parser.parse_args(argv)
 
     version = helper_version()
     output = (args.out or default_output(args.platform)).resolve()
+    umpv_output = (args.umpv_out or default_umpv_output(args.platform)).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
-    if args.binary:
-        source = args.binary.resolve()
-        if not source.is_file():
-            fail(f"prebuilt updater binary is missing: {source}")
+    umpv_output.parent.mkdir(parents=True, exist_ok=True)
+    if args.binary or args.umpv_binary:
+        source = (args.binary or default_output(args.platform)).resolve()
+        umpv_source = (args.umpv_binary or default_umpv_output(args.platform)).resolve()
+        for binary in (source, umpv_source):
+            if not binary.is_file():
+                fail(f"prebuilt binary is missing: {binary}")
     else:
-        source = build(args.platform, args.target, args.target_dir)
+        source, umpv_source = build(args.platform, args.target, args.target_dir)
     shutil.copy2(source, output)
+    shutil.copy2(umpv_source, umpv_output)
     if args.platform == "linux-x64":
         make_executable(output)
+        make_executable(umpv_output)
     verify_binary(output, version)
+    verify_umpv(umpv_output, args.platform)
     log(
         f"updater {version} for {args.platform}: {output} "
         f"({human_size(output.stat().st_size)}, sha256 {sha256_file(output)})"
+    )
+    log(
+        f"umpv for {args.platform}: {umpv_output} "
+        f"({human_size(umpv_output.stat().st_size)}, sha256 {sha256_file(umpv_output)})"
     )
     return 0
 

@@ -88,12 +88,17 @@ function Remove-Integration {
 
     $keys = @(
         'HKCU:\Software\Classes\mpv-playkit',
+        'HKCU:\Software\Classes\mpv-playkit.umpv',
         'HKCU:\Software\Classes\Applications\mpv.exe',
+        'HKCU:\Software\Classes\Applications\umpv.exe',
         'HKCU:\Software\Classes\*\shell\mpv-playkit',
         'HKCU:\Software\Classes\Directory\shell\mpv-playkit',
         'HKCU:\Software\Classes\SystemFileAssociations\video\OpenWithList\mpv.exe',
         'HKCU:\Software\Classes\SystemFileAssociations\audio\OpenWithList\mpv.exe',
+        'HKCU:\Software\Classes\SystemFileAssociations\video\OpenWithList\umpv.exe',
+        'HKCU:\Software\Classes\SystemFileAssociations\audio\OpenWithList\umpv.exe',
         'HKCU:\Software\Clients\Media\mpv-playkit',
+        'HKCU:\Software\Clients\Media\mpv-playkit-umpv',
         $script:UninstallKey
     )
     foreach ($key in $keys) {
@@ -105,27 +110,42 @@ function Remove-Integration {
     $registeredApps = 'HKCU:\Software\RegisteredApplications'
     if (Test-Path -LiteralPath $registeredApps) {
         Remove-ItemProperty -Path $registeredApps -Name $script:ProgId -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $registeredApps -Name 'mpv-playkit.umpv' -ErrorAction SilentlyContinue
     }
 
     Remove-OwnedAppPath -Name 'mpv.exe' -ExpectedPath $script:TargetExe
     Remove-OwnedAppPath -Name 'mpv.com' -ExpectedPath (Join-Path $script:InstallDir 'mpv.com')
+    Remove-OwnedAppPath -Name 'umpv.exe' -ExpectedPath (Join-Path $script:InstallDir 'umpv.exe')
 
     foreach ($ext in $Extensions) {
+        foreach ($progId in @($script:ProgId, 'mpv-playkit.umpv')) {
+            try {
+                $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(
+                    "Software\Classes\.$ext\OpenWithProgids", $true)
+                if ($key) {
+                    try {
+                        $key.DeleteValue($progId, $false)
+                    } finally {
+                        $key.Dispose()
+                    }
+                }
+            } catch {
+                # Protected keys are left untouched; the registration simply never
+                # existed for them.
+                Write-Log "跳过 .$ext：$($_.Exception.Message)"
+            }
+        }
         try {
             $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(
-                "Software\Classes\.$ext\OpenWithProgids", $true)
+                'Software\Classes\Applications\umpv.exe\SupportedTypes', $true)
             if ($key) {
                 try {
-                    $key.DeleteValue($script:ProgId, $false)
+                    $key.DeleteValue(".$ext", $false)
                 } finally {
                     $key.Dispose()
                 }
             }
-        } catch {
-            # Protected keys are left untouched; the registration simply never
-            # existed for them.
-            Write-Log "跳过 .$ext：$($_.Exception.Message)"
-        }
+        } catch { }
     }
 }
 

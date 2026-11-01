@@ -561,6 +561,181 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("installer/linux/install.sh", names)
 
 
+class UmpvTests(unittest.TestCase):
+    def test_helper_names_and_config(self) -> None:
+        from build.helper import default_umpv_output, umpv_filename
+
+        self.assertEqual(umpv_filename("windows-x64"), "umpv.exe")
+        self.assertEqual(umpv_filename("linux-x64"), "umpv")
+        self.assertEqual(default_umpv_output("windows-x64").name, "umpv.exe")
+        windows = (ROOT / "config" / "umpv" / "windows.conf").read_text(encoding="utf-8")
+        self.assertIn(r"\\.\pipe\umpv", windows)
+        self.assertIn("Loadfile_Flag=replace", windows)
+        linux = (ROOT / "config" / "umpv" / "linux.conf").read_text(encoding="utf-8")
+        self.assertIn("Socket_Path=", linux)
+        self.assertIn("Loadfile_Flag=replace", linux)
+
+    def test_metadata_requires_matching_hash_and_size(self) -> None:
+        from build.common import BuildError
+        from build.verify import check_umpv_metadata
+
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = Path(temporary)
+            binary = stage / "umpv.exe"
+            binary.write_bytes(b"x" * 40960)
+            manifest = {
+                "umpv": {
+                    "asset": "umpv.exe",
+                    "version": "1.1.0",
+                    "size": binary.stat().st_size,
+                    "sha256": sha256_file(binary),
+                }
+            }
+            check_umpv_metadata(stage, manifest, "windows-x64")
+            manifest["umpv"]["sha256"] = "0" * 64
+            with self.assertRaises(BuildError):
+                check_umpv_metadata(stage, manifest, "windows-x64")
+            manifest["umpv"]["sha256"] = sha256_file(binary)
+            manifest["umpv"]["size"] = 1
+            with self.assertRaises(BuildError):
+                check_umpv_metadata(stage, manifest, "windows-x64")
+
+    def test_registration_scripts_are_per_user_and_dedicated(self) -> None:
+        windows = ROOT / "installer" / "windows"
+        for name in ("umpv-register.ps1", "umpv-unregister.ps1"):
+            text = (windows / name).read_text(encoding="utf-8-sig")
+            self.assertNotIn("HKLM", text, name)
+            self.assertIn("mpv-playkit.umpv", text, name)
+        register = (windows / "umpv-register.ps1").read_text(encoding="utf-8-sig")
+        for marker in (
+            "Applications\\umpv.exe",
+            "App Paths",
+            "RegisteredApplications",
+            "Software\\Clients\\Media\\mpv-playkit-umpv\\Capabilities",
+            "OpenWithProgids",
+            "SupportedTypes",
+        ):
+            self.assertIn(marker, register)
+        unregister = (windows / "umpv-unregister.ps1").read_text(encoding="utf-8-sig")
+        for marker in (
+            "Applications\\umpv.exe",
+            "App Paths",
+            "RegisteredApplications",
+            "Software\\Clients\\Media\\mpv-playkit-umpv",
+            "OpenWithProgids",
+            "SupportedTypes",
+        ):
+            self.assertIn(marker, unregister)
+        for name in ("umpv-register.cmd", "umpv-unregister.cmd"):
+            text = (windows / name).read_text(encoding="utf-8")
+            self.assertIn("powershell.exe", text)
+            self.assertIn(".ps1", text)
+
+    def test_required_package_files(self) -> None:
+        from build import verify
+
+        self.assertIn("umpv.conf", verify.REQUIRED)
+        for name in (
+            "umpv.exe",
+            "installer/windows/umpv-register.ps1",
+            "installer/windows/umpv-unregister.ps1",
+            "installer/windows/umpv-register.cmd",
+            "installer/windows/umpv-unregister.cmd",
+        ):
+            self.assertIn(name, verify.WINDOWS_REQUIRED)
+        self.assertIn("umpv", verify.LINUX_REQUIRED)
+
+
+class ModeLauncherTests(unittest.TestCase):
+    def test_modes_are_shipped(self) -> None:
+        modes = ROOT / "installer" / "modes"
+        for name in (
+            "pure.cmd",
+            "pure.sh",
+            "test.cmd",
+            "test.sh",
+            "benchmark.cmd",
+            "benchmark.sh",
+            "test.conf",
+            "benchmark.conf",
+            "README.md",
+        ):
+            self.assertTrue((modes / name).is_file(), name)
+
+    def test_modes_ignore_portable_configuration(self) -> None:
+        modes = ROOT / "installer" / "modes"
+        for name in ("pure.cmd", "pure.sh", "test.cmd", "test.sh", "benchmark.cmd", "benchmark.sh"):
+            text = (modes / name).read_text(encoding="utf-8")
+            self.assertIn("--config=no", text, name)
+        for name in ("test.cmd", "test.sh", "benchmark.cmd", "benchmark.sh"):
+            text = (modes / name).read_text(encoding="utf-8")
+            self.assertIn("--include", text, name)
+        benchmark = (modes / "benchmark.conf").read_text(encoding="utf-8")
+        for profile in ("bench_api_1", "bench_api_2", "bench_api_3", "bench_render_1", "bench_render_2"):
+            self.assertIn(f"[{profile}]", benchmark)
+        test = (modes / "test.conf").read_text(encoding="utf-8")
+        self.assertIn("idle=once", test)
+        self.assertIn("vo=gpu-next", test)
+
+
+class ScriptContentTests(unittest.TestCase):
+    def _options(self, name: str) -> dict[str, str]:
+        text = (ROOT / "config" / "common" / "script-opts" / name).read_text(encoding="utf-8")
+        result = {}
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            result[key.strip()] = value.strip()
+        return result
+
+    def test_input_plus_bindings_match_the_menu(self) -> None:
+        script = (ROOT / "scripts" / "local" / "input_plus.lua").read_text(encoding="utf-8")
+        menu = (ROOT / "config" / "common" / "menu.conf").read_text(encoding="utf-8")
+        referenced = set(re.findall(r"script-binding input_plus/([\w-]+)", menu))
+        referenced.update(re.findall(r"script-message-to input_plus ([\w-]+)", menu))
+        for name in referenced:
+            if name == "lazy-helper":
+                self.assertIn('register_script_message("lazy-helper"', script)
+            else:
+                self.assertIn(f'add_key_binding(nil, "{name}"', script, name)
+        self.assertNotIn("powershell.exe", script.casefold())
+        self.assertNotIn("-NoProfile", script)
+        self.assertIn('pcall(require, "mp.input")', script)
+        self.assertNotIn("type(mp.input)", script)
+        options = self._options("input_plus.conf")
+        self.assertEqual(options.get("load"), "yes")
+        self.assertIn("chapter_keywords", options)
+        self.assertEqual(options.get("speed_target"), "3")
+
+    def test_thumbfast_options_and_cache_guards(self) -> None:
+        options = self._options("thumbfast.conf")
+        self.assertEqual(options.get("thumbnail_hwdec"), "no")
+        self.assertEqual(options.get("max_cache_files"), "400")
+        self.assertEqual(options.get("max_cache_age_days"), "30")
+        self.assertEqual(options.get("failure_limit"), "3")
+        self.assertEqual(options.get("retry_seconds"), "60")
+        script = (ROOT / "scripts" / "local" / "thumbfast.lua").read_text(encoding="utf-8")
+        for marker in ("thumbnail_hwdec", "abort_async_command", "overlay-add", "cleanup_cache", "is_still_image"):
+            self.assertIn(marker, script)
+
+    def test_native_context_menu_is_loaded(self) -> None:
+        mpv_conf = (ROOT / "config" / "common" / "mpv.conf").read_text(encoding="utf-8")
+        self.assertIn("load-context-menu=yes", mpv_conf)
+        self.assertTrue((ROOT / "config" / "common" / "menu.conf").is_file())
+        input_conf = (ROOT / "config" / "common" / "input.conf").read_text(encoding="utf-8")
+        self.assertIn("Ctrl+MBTN_RIGHT context-menu", input_conf)
+
+    def test_uosc_options_keep_the_documented_enhancements(self) -> None:
+        options = self._options("uosc.conf")
+        self.assertEqual(options.get("scale"), "0")
+        self.assertEqual(options.get("autoload"), "yes")
+        self.assertIn("en", options.get("languages", "").split(","))
+        for name in ("video_types", "audio_types", "image_types", "subtitle_types"):
+            self.assertTrue(options.get(name), name)
+
+
 class ReleaseChecksumTests(unittest.TestCase):
     def test_checksums_only_list_published_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

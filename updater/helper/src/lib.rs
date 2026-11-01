@@ -14,5 +14,6 @@ pub mod patch;
 pub mod state;
 pub mod status;
 pub mod swap;
+pub mod umpv;
 pub mod update;
 pub mod util;

@@ -12,10 +12,11 @@
 | `config/common/` | 两平台共用的 `mpv.conf`、`input.conf`、`menu.conf`、`profiles.conf`、`script-opts/` |
 | `config/windows/` | `platform.conf`（WASAPI、IME）与 `ytdl_hook.conf` |
 | `config/linux/` | `platform.conf`（PipeWire/PulseAudio/ALSA）与 `ytdl_hook.conf` |
+| `config/umpv/` | 单实例启动器配置；构建时复制为包根 `umpv.conf` |
 | `scripts/local/` | 本项目原创 Lua（`idle-brand`、`save_global_props`、`input_plus`、`thumbfast`）；构建时复制到包内 `portable_config/scripts/` 根目录 |
 | `updater/update-check.lua` | 播放器内更新检测与安装界面；构建时同样复制到 scripts 根目录 |
-| `updater/helper/` | Rust 更新器（下载、校验、patch、事务交换）；构建时放入安装目录根部 `updater/` |
-| `installer/` | Windows 安装/卸载脚本与图标；Linux 安装接口占位（未实现）；构建时原样复制到包内 |
+| `updater/helper/` | Rust 更新器与 umpv 单实例启动器（下载、校验、patch、事务交换）；构建时分别放入安装目录根部 `updater/` 和包根 |
+| `installer/` | Windows 安装/卸载与 umpv 注册脚本、图标；Linux 安装接口占位（未实现）；`modes/` 提供纯净/测试/跑分启动器；构建时原样复制到包内 |
 | `manifests/*.yml` | 上游仓库、Release 选择方式、资产正则、许可证、解包与安装规则 |
 | `sources.lock.json` | 解析后的固定版本、URL、SHA-256；每月由工作流刷新 |
 | `build/` | 构建工具（纯 Python，无第三方运行时依赖，除 PyYAML） |
@@ -43,12 +44,12 @@ build.fetch ── 两个平台分别下载资产与许可证，校验 lock 中�
       │
       ▼
 build.helper ── cargo build --release --locked；Windows 静态 CRT，Linux musl
-      │
+      │         产出 updater helper 与 umpv 单实例启动器
       ▼
 build.assemble ── 按平台解包、安装、生成 playkit-version.json / manifest.json
-      │            + .playkit 状态、playkit-inventory.json、updater helper
+      │            + .playkit 状态、playkit-inventory.json、updater helper、umpv
       ▼
-build.smoke ── mpv --version + 配置加载播放 + yt-dlp --version
+build.smoke ── mpv --version + 配置加载播放 + yt-dlp/updater/umpv --version
       │
       ▼
 build.package ── 确定性 zip / tar.gz + .sha256
@@ -166,6 +167,23 @@ LICENSE_PROVENANCE.md
 的语义。补丁锚点在上游更新后找不到时构建会明确失败；被打补丁的文件带有本项目
 名称与修改日期的说明，其余 uosc 文件保持上游原样。
 
+## input_plus
+
+`scripts/local/input_plus.lua` 是基线的原创替代，按 P0–P2 分层提供：
+
+- P0：按键名检测（ASS 圆角提示、修饰键分色、绑定说明、`ESC`/同一快捷键退出、
+  独占 input section 与黑名单重放）、文档链接。
+- P1：信息面板、文件/URL/DVD/蓝光导入、外部音轨/字幕追加、音频设备循环、
+  章节前进/后退与跨文件、跳过片头片尾、墙钟时间。
+- P2：命令/统计页循环、音轨/字幕/视频轨循环与刷新、dB 音量、退出确认、
+  播放列表乱序/随机/临时保存加载、速度恢复/自适应、AB 音轨标记与
+  `lavfi-complex` 并轨、长按清空 `af`/`vf`/`glsl-shaders`、长按加速 seek。
+
+导入对话框使用 mpv 0.39+ 的 `mp.input` 模块（`require "mp.input"` 后调用
+`get`），不调用 PowerShell；需要文件选择器时优先调用 uosc 的
+`uosc/open-file`，没有 uosc 时回退到文本输入。
+脚本不读写任何非 mpv 授权的外部程序。
+
 ## 缩略图引擎
 
 uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息。本项目的
@@ -177,8 +195,35 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
    使用 `--start=<bucket> --vo=null --vf=scale=...` 解码一帧，经
    `screenshot-raw` 写成 BGRA 原始帧和尺寸元数据。
 3. 主进程用 `overlay-add` 显示该帧，`clear` 时移除。
-4. 默认跳过短于 30 秒的视频；可通过 `script-opts/thumbfast.conf` 调整。
+4. 默认跳过短于 `min_duration` 的视频、静态图片和专辑封面；网络视频可用
+   `network=no` 关闭。子进程支持单独的 `thumbnail_hwdec`，默认 `no`。
 5. 子进程复用包内 mpv，不额外依赖 ffmpeg；Windows 和 Linux 共用同一实现。
+6. 每次请求有 `timeout_seconds` 上限，超时会终止子进程；连续失败达到
+   `failure_limit` 后暂停 `retry_seconds` 再恢复，而不是永久关闭缩略图。
+7. 磁盘缓存按文件路径、大小、时长和 mtime 生成键；启动/切换文件时按
+   `max_cache_files`、`max_cache_age_days` 和 `cache_cleanup_interval` 清理过期
+   条目，但不会删除 `thumbfast-client.lua` 解码脚本。
+8. 用户可用 `thumbfast/toggle`、`thumbfast/rerun` 脚本绑定手动开关或重试。
+
+## 单实例启动器 umpv
+
+`updater/helper/src/umpv.rs` 是与更新器一起构建的 Rust 二进制，包内名称
+`umpv.exe`（Windows）或 `umpv`（Linux）。第一次调用启动
+`mpv --input-ipc-server=<端点> --idle=yes --force-window=yes -- <文件...>`；
+后续调用连接同一端点，按 `Loadfile_Flag` 发送 JSON `loadfile` 命令。配置位于
+包根 `umpv.conf`（来自 `config/umpv/<os>.conf`）；Windows 使用命名管道，Linux
+使用 Unix domain socket。`build.helper` 同时构建两个二进制，`build.assemble`
+把 umpv 放在包根并写入 manifest 元数据，`build.smoke` 和 `build.verify` 校验
+`--version`、大小、SHA-256 与 Linux 可执行位。详见 [umpv](umpv.md)。
+
+## 模式启动器
+
+`installer/modes/` 提供 `pure`、`test`、`benchmark` 三组跨平台启动脚本。它们
+都以 `--config=no` 启动，避免读取 `portable_config/`；`test` 只加载
+`test.conf`，`benchmark` 只加载 `benchmark.conf` 并定义
+`bench_api_1/2/3` 与 `bench_render_1/2` profile。日志写在包根目录。构建时
+`build.assemble` 会把 `modes/*.sh` 置为可执行，保证从 Linux 压缩包解压后能
+直接运行。
 
 ## 运行时状态隔离
 
@@ -203,6 +248,8 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 - `yt-dlp.exe` 放在包根目录。
 - 更新器为安装目录根部的 `updater/playkit-updater.exe`，使用 MSVC 静态 CRT
   构建，不依赖系统 VC++ 运行库。
+- `umpv.exe` 位于包根目录，GUI 子系统，与更新器共用静态 CRT；首次启动 mpv 时
+  使用 `CREATE_NO_WINDOW` 避免额外控制台窗口。
 
 ### Linux
 
@@ -214,6 +261,8 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 - 生成的 `mpv-playkit` 启动器设置 `DISABLE_AUTO_UPDATES=1`，用
   `--config-dir` 指向包内 `portable_config/`，并执行 `mpv/AppRun`。
 - `yt-dlp` 放在包根目录并加入启动器的 `PATH`。
+- `umpv` 位于包根目录，优先调用 `mpv-playkit` 启动器，保证新进程仍读取
+  `portable_config/`；不存在时回退到 `mpv/AppRun` 或 `PATH` 中的 `mpv`。
 - 更新器为安装目录根部的 `updater/playkit-updater`，使用
   `x86_64-unknown-linux-musl` 静态链接；打包时设置可执行位并在压缩包中保留。
 
@@ -222,7 +271,8 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 `build.verify` 与 `build.assemble` 会在发布前检查：
 
 1. 必需文件存在（两个平台的播放器、配置、脚本、字体、manifest、许可证索引、
-   `playkit-inventory.json`、`.playkit/state.json`、helper）。
+   `playkit-inventory.json`、`.playkit/state.json`、helper、umpv、`umpv.conf`、
+   Windows umpv 注册脚本与模式启动器）。
 2. 禁用路径不存在：基线目录、shader、VapourSynth、历史 `thumb_engine`、模型、
    AppImage 自更新/yt-dlp 下载 hook、运行时缓存和状态文件。
 3. `mpv.conf` 中 `~~/` 引用存在。
@@ -230,10 +280,13 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 5. 更新器元数据：`protocol=1`、`patch_schema=1`（兼容旧 helper 的桥接版本；
    新 helper 同时接受 1/2）、`min_helper_version=1.0.0`、固定的 `user_layer` /
    `state_dir`、helper 资产名/版本/SHA-256/大小；Linux 上 helper 必须可执行。
-6. `playkit-inventory.json` 覆盖包内全部官方文件，哈希匹配；官方基线与生成配置
+6. umpv 元数据：资产名、版本、大小、SHA-256 与包内二进制一致；Linux 上必须
+   可执行。Windows 注册脚本只能写 `HKCU`，并使用专属 ProgID
+   `mpv-playkit.umpv`。
+7. `playkit-inventory.json` 覆盖包内全部官方文件，哈希匹配；官方基线与生成配置
    相同；每个文件都可通过路径安全检查。
-7. 压缩包顶层目录正确、无路径穿越、必需成员齐全、SHA-256 匹配。
-8. `manifest.json` 的版本和平台与构建参数一致（Release manifest schema 2；
+8. 压缩包顶层目录正确、无路径穿越、必需成员齐全、SHA-256 匹配。
+9. `manifest.json` 的版本和平台与构建参数一致（Release manifest schema 2；
    旧版 schema 1 仍可解析，新增字段是可选扩展）。
 
 任何一步抛错都会让工作流失败，后续 release 作业不会运行。

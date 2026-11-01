@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | `uosc/elements/Logo.lua` | 重写 | `scripts/local/idle-brand.lua`：原创绘图代码，复现 mpv OSC 空闲徽标造型（设计来自 mpv 的 `player/lua/osc.lua`，GPL-2.0-or-later / LGPL-2.1-or-later）；不使用基线的 `Logo.lua` 代码 |
 | `uosc/lib/lang.lua` | 由上游替代 | 使用 uosc 5.13.0 官方 `lib/intl.lua`（LGPL-2.1），不复制基线的部分副本；`uosc.conf` 设置 `languages=slang,zh-hans,zh,en` |
-| `input_plus.lua` | 重写 | `scripts/local/input_plus.lua`：原创按键名检测和文档链接；不包含基线代码 |
+| `input_plus.lua` | 重写 | `scripts/local/input_plus.lua`：原创实现按键名检测、信息面板、导入、设备/轨道/章节工具、播放列表与 AB 并轨等 P0–P2 功能；不包含基线代码，也不调用 PowerShell |
 | `save_global_props.lua` | 重写 | `scripts/local/save_global_props.lua`：原创属性保存/恢复，默认 `volume,mute` |
 | `thumb_engine/batch.lua` | 合并重写 | 统一由 `scripts/local/thumbfast.lua` 实现，不再存在 `thumb_engine/` 目录 |
 | `thumb_engine/helper.lua` | 合并重写 | 同上 |
@@ -28,7 +28,7 @@
 | --- | --- | --- |
 | `idle-brand.lua` | 空闲画面文字标签 | 本项目原创 |
 | `save_global_props.lua` | 保存/恢复音量与静音 | 本项目原创 |
-| `input_plus.lua` | 按键名检测、文档链接 | 本项目原创 |
+| `input_plus.lua` | 按键名检测、信息面板、导入、设备/轨道/章节工具、播放列表、速度与 AB 并轨 | 本项目原创 |
 | `thumbfast.lua` | uosc 时间轴缩略图 | 本项目原创，干净实现 |
 | `update-check.lua` | GitHub Release 更新提示 | 本项目原创 |
 
@@ -39,7 +39,16 @@
 - 收到 `thumb` 时用 `mpv --start=<time>` 子进程解码一帧，缩放到最大 270×270，
   以 BGRA 原始帧缓存；
 - 用 `overlay-add` 显示，收到 `clear` 时移除；
-- 默认对短于 30 秒的文件禁用，可在 `script-opts/thumbfast.conf` 调整。
+- 默认对短于 `min_duration` 的文件、静态图片和专辑封面禁用；
+- 子进程超时会终止，连续失败后短暂暂停而不是永久禁用；
+- 按 `max_cache_files` / `max_cache_age_days` 清理磁盘缓存；
+- 选项位于 `script-opts/thumbfast.conf`，并提供 `thumbfast/toggle` 与
+  `thumbfast/rerun` 绑定。
+
+`input_plus.lua` 的导入功能使用 mpv 0.39+ 的 `mp.input` 模块（通过
+`require "mp.input"` 加载，再调用 `get`）或 uosc `open-file`，从未调用
+PowerShell、Python 或其他外部解释器；AB 并轨只使用 mpv 的
+`lavfi-complex` 属性。
 
 ## uosc
 

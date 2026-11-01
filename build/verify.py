@@ -39,6 +39,7 @@ REQUIRED = [
     "playkit-inventory.json",
     "manifest.json",
     "playkit-version.json",
+    "umpv.conf",
     "licenses/INDEX.json",
     "README.txt",
     "LICENSE",
@@ -48,17 +49,23 @@ REQUIRED = [
 ]
 WINDOWS_REQUIRED = [
     "mpv.exe",
+    "umpv.exe",
     "yt-dlp.exe",
     "updater/playkit-updater.exe",
     "installer/windows/install.ps1",
     "installer/windows/uninstall.ps1",
     "installer/windows/install.cmd",
     "installer/windows/uninstall.cmd",
+    "installer/windows/umpv-register.ps1",
+    "installer/windows/umpv-unregister.ps1",
+    "installer/windows/umpv-register.cmd",
+    "installer/windows/umpv-unregister.cmd",
     "installer/windows/mpv-playkit.ico",
 ]
 LINUX_REQUIRED = [
     "mpv/AppRun",
     "mpv-playkit",
+    "umpv",
     "yt-dlp",
     "updater/playkit-updater",
     "installer/linux/install.sh",
@@ -145,6 +152,12 @@ def check_installer(stage: Path, platform: str) -> None:
         ):
             if marker not in uninstall:
                 fail(f"uninstall.ps1 is missing the {marker} cleanup")
+        for name in ("umpv-register.ps1", "umpv-unregister.ps1"):
+            text = (stage / "installer" / "windows" / name).read_text(encoding="utf-8")
+            if "HKLM" in text:
+                fail(f"{name} must only write HKCU, not HKLM")
+            if "mpv-playkit.umpv" not in text:
+                fail(f"{name} must use the dedicated mpv-playkit.umpv ProgID")
     elif platform == "linux-x64":
         script = (stage / "installer" / "linux" / "install.sh").read_text(encoding="utf-8")
         if "尚未实现" not in script:
@@ -232,6 +245,24 @@ def update_check_gate_ok(text: str) -> bool:
     return gate < calls[0].start()
 
 
+def check_umpv_metadata(stage: Path, manifest: dict, platform: str) -> None:
+    umpv = manifest.get("umpv") or {}
+    name = "umpv.exe" if platform == "windows-x64" else "umpv"
+    path = stage / name
+    if not path.is_file():
+        fail(f"missing umpv binary: {name}")
+    if umpv.get("asset") != name:
+        fail(f"manifest umpv.asset must be {name}")
+    if not isinstance(umpv.get("version"), str) or not umpv["version"]:
+        fail("manifest umpv.version is missing")
+    if umpv.get("sha256") != sha256_file(path):
+        fail("manifest umpv.sha256 does not match the packaged umpv")
+    if umpv.get("size") != path.stat().st_size:
+        fail("manifest umpv.size does not match the packaged umpv")
+    if platform == "linux-x64" and not (path.stat().st_mode & stat.S_IXUSR):
+        fail("Linux umpv binary is not executable")
+
+
 def check_updater_metadata(stage: Path, manifest: dict, platform: str) -> None:
     updater = manifest.get("updater") or {}
     if updater.get("protocol") != 1:
@@ -317,6 +348,7 @@ def check_stage(stage: Path, platform: str, version: str | None) -> None:
     check_licenses(stage, platform)
     check_manifest_license_files(stage, manifest)
     check_updater_metadata(stage, manifest, platform)
+    check_umpv_metadata(stage, manifest, platform)
     verify_package_state(stage, manifest.get("playkit_version", ""), platform)
     log(f"verified stage {stage} ({platform})")
 

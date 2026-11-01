@@ -137,6 +137,17 @@ def main(argv: list[str] | None = None) -> int:
         if "playkit-updater" not in updater_version:
             fail(f"unexpected updater version output: {updater_version!r}")
         log(updater_version.strip().splitlines()[0])
+
+        # umpv is the single-instance launcher.  --version must start cleanly;
+        # on Windows the release binary uses the GUI subsystem, so its output
+        # may be empty even though the exit status is zero.
+        umpv = stage / ("umpv.exe" if args.platform == "windows-x64" else "umpv")
+        if not umpv.is_file():
+            fail(f"umpv launcher is missing: {umpv}")
+        umpv_version = run_test([umpv, "--version"], cwd=stage, timeout=args.timeout, env=env)
+        if args.platform == "linux-x64" and "umpv" not in umpv_version:
+            fail(f"unexpected umpv version output: {umpv_version!r}")
+        log(umpv_version.strip().splitlines()[0] if umpv_version.strip() else "umpv --version ok")
     log(f"smoke tests passed for {args.platform}")
     return 0
 

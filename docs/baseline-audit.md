@@ -48,7 +48,7 @@
 | --- | --- |
 | 基线中未修改的 uosc 文件 | 改为构建时从上游下载当前 Release（仅 `main.lua` 应用自动 UI 缩放补丁） |
 | 基线中修改过的 uosc | 不导入；本项目只通过配置层、构建期 `main.lua` 补丁和缩略图消息协议定制 |
-| 9 个未解决 Lua | 全部由原创实现或官方上游替代：`idle-brand`、`input_plus`、`save_global_props`、`thumbfast` 重写；`lang` 使用 uosc 官方 `intl.lua` |
+| 9 个未解决 Lua | 全部由原创实现或官方上游替代：`idle-brand`、`input_plus`、`save_global_props`、`thumbfast` 重写；`lang` 使用 uosc 官方 `intl.lua`。`input_plus` 现已覆盖基线的按键检测、信息面板、导入、设备/轨道/章节工具、播放列表、速度与 AB 并轨等 P0–P2 功能，但不复制基线代码，也不调用 PowerShell |
 | shader / VapourSynth / AI 组件 | 不导入 |
 | 基线二进制 | 不导入；改为从各上游 Release 获取并校验 |
 | 配置思路 | 作为需求参考，重新编写 |

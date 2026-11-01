@@ -16,6 +16,8 @@ uosc 界面与菜单、完整快捷键、时间轴缩略图、属性保存、统
 - uosc（构建时仅对 `main.lua` 应用自动 UI 缩放补丁，其余文件保持上游）与
   LXGW WenKai Mono Lite 字体
 - 播放器配置、profiles、按键菜单与原创本地脚本
+- Rust `umpv` 单实例启动器：多个文件交给同一个 mpv 窗口，Windows/Linux 共用一套源码
+- 纯净/测试/跑分模式启动器（`installer/modes/`），用于隔离配置问题和基准测试
 - 播放器内自动更新：Rust 更新器负责下载、校验、patch 和事务式替换
 - 用户配置 patch 层（`portable_config/user/`），更新时自动重新应用
 - GitHub Actions 每月自动检查、构建与发布
@@ -31,6 +33,9 @@ uosc 界面与菜单、完整快捷键、时间轴缩略图、属性保存、统
   也可以双击 `installer\windows\install.cmd` 安装到当前用户目录，创建开始菜单、
   桌面快捷方式、右键菜单和“打开方式”注册（不需要管理员权限，详见
   [installer/README.md](installer/README.md)）。
+  单实例启动：把媒体文件交给包根目录的 `umpv.exe`，或运行
+  `installer\windows\umpv-register.cmd` 把 `umpv.exe` 加入“打开方式”。
+  详见 [docs/umpv.md](docs/umpv.md)。
 - Linux：解压 `mpv-PlayKit-<version>-linux-x64.tar.gz`，在终端运行：
 
   ```sh
@@ -93,9 +98,11 @@ config/
   common/            两个平台共用的 mpv 配置、按键、原生菜单、profiles、script-opts
   windows/           Windows 平台配置
   linux/             Linux 平台配置
+  umpv/              umpv 单实例启动器配置（Windows 命名管道 / Linux socket）
 scripts/local/       本项目原创或重写的 Lua（构建时复制到 scripts/ 根目录）
-installer/           可选的 Windows 安装/卸载脚本与 Linux 安装接口占位
-updater/            播放器内更新检测 Lua 与 Rust 更新器 helper（updater/helper/）
+installer/           可选的 Windows 安装/卸载与 umpv 注册脚本、Linux 安装接口占位
+installer/modes/     纯净/测试/跑分模式启动器
+updater/            播放器内更新检测 Lua 与 Rust 更新器/umpv（updater/helper/）
 manifests/           上游来源、资产匹配规则、安装规则
 sources.lock.json    当前固定的上游版本与哈希
 build/               解析、下载、解包、组装、打包、校验与发布工具
@@ -114,7 +121,7 @@ docs/                架构、上游、更新检测器与许可证处置说明
 ```sh
 python -m pip install -r requirements.txt
 
-# 0. 构建 Rust 更新器（Windows 产物为 playkit-updater.exe）
+# 0. 构建 Rust 更新器与 umpv（Windows 产物为 playkit-updater.exe / umpv.exe）
 python -m build.helper --platform windows-x64
 
 # 1. 解析上游并写 lock（也可先用仓库中已有的 sources.lock.json）
@@ -162,8 +169,8 @@ Ubuntu runner。
 
 发布前会检查：必需文件、禁用路径（基线文件、shader、VapourSynth、模型、
 自更新/yt-dlp 下载 hook）、`update-check` 的联网门禁顺序、压缩包顶层目录与
-SHA-256，以及更新器清单（`playkit-inventory.json`、`.playkit/state.json`、
-helper 版本/大小/SHA-256、Linux 可执行位）。任何一项失败都不会发布。
+SHA-256，以及更新器与 umpv 清单（`playkit-inventory.json`、`.playkit/state.json`、
+helper/umpv 版本/大小/SHA-256、Linux 可执行位）。任何一项失败都不会发布。
 
 ## 许可证
 
@@ -181,5 +188,6 @@ helper 版本/大小/SHA-256、Linux 可执行位）。任何一项失败都不�
 - [播放器内更新检测器](docs/update-checker.md)
 - [自动更新与事务式安装](docs/updater.md)
 - [用户配置 Patch](docs/user-patches.md)
+- [umpv 单实例启动器](docs/umpv.md)
 - [Lua 处置清单](docs/lua-disposition.md)
 - [基线审计摘要](docs/baseline-audit.md)

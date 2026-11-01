@@ -227,8 +227,16 @@ python -m build.helper --platform windows-x64
 python -m build.helper --platform linux-x64
 ```
 
-`build.assemble` 通过 `--helper` 接收构建好的二进制并放进安装目录根部的
-`updater/`；`build.verify` 校验其版本、大小、SHA-256 和 Linux 可执行位。CI 在
+同一条命令还会构建 `umpv`（参数解析与单实例启动器），输出到
+`dist/updater/<platform>/umpv(.exe)`（与更新器二进制同目录）；
+`--out` / `--umpv-out` 可分别覆盖输出路径，
+`--binary` / `--umpv-binary` 可跳过构建直接指定已有二进制。
+Cargo 测试同时覆盖 `updater/helper/tests/` 下的更新器集成测试与
+`tests/umpv.rs` 中的启动器集成测试。
+
+`build.assemble` 通过 `--helper` 接收构建好的更新器二进制并放进安装目录根部的
+`updater/`，通过 `--umpv` 接收启动器二进制并放在安装目录根部；`build.verify`
+校验两者的版本、大小、SHA-256 和 Linux 可执行位。CI 在
 Ubuntu 与 Windows 上运行 `cargo test`、`cargo fmt --check` 和
 `cargo clippy -D warnings`，然后为两个平台交叉构建（Windows MSVC 静态 CRT，
 Linux musl 静态链接）。

@@ -28,7 +28,14 @@ from .common import (
     write_json,
 )
 from .extract import DEFAULT_REMOVED_HOOKS, extract_component, hook_is_removed
-from .helper import MIN_HELPER_VERSION, default_output, helper_filename, helper_version
+from .helper import (
+    MIN_HELPER_VERSION,
+    default_output,
+    default_umpv_output,
+    helper_filename,
+    helper_version,
+    umpv_filename,
+)
 from .inputs import compute_inputs_hash
 from .patch_uosc import patch_uosc
 from .userstate import write_inventory, write_package_state
@@ -156,6 +163,10 @@ def copy_configuration(stage: Path, platform: str) -> None:
     if not (portable / "platform.conf").is_file():
         fail(f"portable_config/platform.conf missing for {platform}")
 
+    # umpv.conf belongs next to the launcher binary, not inside
+    # portable_config: it describes the IPC endpoint used before mpv starts.
+    copy_file(ROOT / "config" / "umpv" / f"{os_name}.conf", stage / "umpv.conf")
+
     # mpv auto-loads every script below portable_config/scripts/.  Keep local
     # scripts as direct children so they are loaded exactly once, and let
     # uosc/ load as a directory script (it relies on its own require() paths).
@@ -226,6 +237,19 @@ def copy_helper(stage: Path, platform: str, source: Path) -> Path:
     return target
 
 
+def copy_umpv(stage: Path, platform: str, source: Path) -> Path:
+    """Place umpv next to mpv.exe / mpv-playkit so it finds portable_config."""
+    if not source.is_file():
+        fail(
+            f"missing umpv binary: {source}; run "
+            f"`python -m build.helper --platform {platform}` first"
+        )
+    target = stage / umpv_filename(platform)
+    copy_file(source, target, executable=platform == "linux-x64")
+    log(f"installed umpv: {target.relative_to(stage)}")
+    return target
+
+
 def write_metadata(
     stage: Path,
     *,
@@ -238,6 +262,7 @@ def write_metadata(
     fetched: dict[str, Any],
     lock: dict[str, Any],
     helper: Path,
+    umpv: Path | None = None,
 ) -> None:
     components: dict[str, Any] = {}
     for identifier, entry in sorted(fetched.items()):
@@ -290,6 +315,14 @@ def write_metadata(
         "size": helper.stat().st_size,
         "sha256": sha256_file(helper),
     }
+    umpv_info = None
+    if umpv is not None and umpv.is_file():
+        umpv_info = {
+            "version": helper_version(),
+            "asset": umpv_filename(platform),
+            "size": umpv.stat().st_size,
+            "sha256": sha256_file(umpv),
+        }
     version_info = {
         "schema": 1,
         "playkit_version": version,
@@ -303,6 +336,8 @@ def write_metadata(
         "updater": updater,
         "helper": helper_info,
     }
+    if umpv_info is not None:
+        version_info["umpv"] = umpv_info
     write_json(stage / "playkit-version.json", version_info)
 
     package_manifest = {
@@ -337,6 +372,7 @@ def verify_stage_minimum(stage: Path, platform: str) -> None:
         stage / "manifest.json",
         stage / "playkit-version.json",
         stage / "playkit-inventory.json",
+        stage / "umpv.conf",
         portable / ".playkit" / "state.json",
         portable / ".playkit" / "official" / "mpv.conf",
         portable / ".playkit" / "official" / "input.conf",
@@ -353,11 +389,16 @@ def verify_stage_minimum(stage: Path, platform: str) -> None:
         required.extend(
             [
                 stage / "mpv.exe",
+                stage / "umpv.exe",
                 stage / "yt-dlp.exe",
                 stage / "installer" / "windows" / "install.ps1",
                 stage / "installer" / "windows" / "uninstall.ps1",
                 stage / "installer" / "windows" / "install.cmd",
                 stage / "installer" / "windows" / "uninstall.cmd",
+                stage / "installer" / "windows" / "umpv-register.ps1",
+                stage / "installer" / "windows" / "umpv-unregister.ps1",
+                stage / "installer" / "windows" / "umpv-register.cmd",
+                stage / "installer" / "windows" / "umpv-unregister.cmd",
                 stage / "installer" / "windows" / "mpv-playkit.ico",
             ]
         )
@@ -366,6 +407,7 @@ def verify_stage_minimum(stage: Path, platform: str) -> None:
             [
                 stage / "mpv" / "AppRun",
                 stage / "mpv-playkit",
+                stage / "umpv",
                 stage / "yt-dlp",
                 stage / "installer" / "linux" / "install.sh",
                 stage / "installer" / "linux" / "mpv-playkit.desktop.in",
@@ -386,6 +428,7 @@ def verify_stage_minimum(stage: Path, platform: str) -> None:
         make_executable(stage / "mpv" / "AppRun.sh")
         make_executable(stage / "yt-dlp")
         make_executable(stage / "updater" / helper_filename(platform))
+        make_executable(stage / umpv_filename(platform))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -404,6 +447,12 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help="prebuilt playkit-updater binary (default: dist/updater/<platform>/)",
+    )
+    parser.add_argument(
+        "--umpv",
+        type=Path,
+        default=None,
+        help="prebuilt umpv binary (default: dist/updater/<platform>/)",
     )
     args = parser.parse_args(argv)
 
@@ -436,6 +485,10 @@ def main(argv: list[str] | None = None) -> int:
     if not installer.is_dir():
         fail("installer directory is missing")
     copy_tree(installer, stage / "installer")
+    # Git on Windows does not preserve an executable bit for untracked shell
+    # helpers, so set it on the staged copies regardless of the checkout mode.
+    for script in (stage / "installer" / "modes").glob("*.sh"):
+        make_executable(script)
     log("installed installer scripts")
 
     for identifier, component in sorted(components.items()):
@@ -465,6 +518,11 @@ def main(argv: list[str] | None = None) -> int:
         args.platform,
         (args.helper or default_output(args.platform)).resolve(),
     )
+    umpv_path = copy_umpv(
+        stage,
+        args.platform,
+        (args.umpv or default_umpv_output(args.platform)).resolve(),
+    )
     built_at = args.built_at or now_iso()
     write_metadata(
         stage,
@@ -477,6 +535,7 @@ def main(argv: list[str] | None = None) -> int:
         fetched=fetched,
         lock=lock,
         helper=helper_path,
+        umpv=umpv_path,
     )
     write_package_state(stage, args.version, args.platform, built_at)
     write_inventory(stage)

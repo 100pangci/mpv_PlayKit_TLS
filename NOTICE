@@ -2,10 +2,10 @@ mpv PlayKit TLS
 Copyright (C) 2026 mpv PlayKit TLS contributors
 
 This project's original material - configuration files, build tooling,
-documentation, the installer scripts under installer/, and the Lua scripts
-under scripts/local/ and updater/ - is licensed under the GNU General Public
-License, version 3 or (at your option) any later version.  The full license
-text is in LICENSE.
+documentation, the installer scripts under installer/, the Rust sources under
+updater/helper/, and the Lua scripts under scripts/local/ and updater/ - is
+licensed under the GNU General Public License, version 3 or (at your option) any
+later version.  The full license text is in LICENSE.
 
 Third-party components are not covered by the project's GPL license.  They are
 fetched at build time and remain under their own upstream licenses:

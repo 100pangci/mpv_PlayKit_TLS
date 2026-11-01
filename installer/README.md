@@ -5,6 +5,17 @@
 
 所有安装器代码均为本项目原创，按 GPL-3.0-or-later 分发。
 
+## 模式启动器
+
+`modes/` 提供纯净、测试、跑分三种启动方式，用于隔离配置问题或做基准测试：
+
+- Windows：`modes\pure.cmd`、`modes\test.cmd`、`modes\benchmark.cmd`
+- Linux：`modes/pure.sh`、`modes/test.sh`、`modes/benchmark.sh`
+
+它们都以 `--config=no` 启动，不读取 `portable_config/`，日志写在包根目录。
+跑分模式提供 `bench_api_1/2/3` 与 `bench_render_1/2` profile，详见
+[modes/README.md](modes/README.md)。
+
 ## Windows
 
 双击 `windows\install.cmd` 打开图形界面。安装程序只写入当前用户
@@ -76,6 +87,23 @@ installer\windows\uninstall.cmd -Silent [-KeepUserData]
   `mpv-playkit`，不会覆盖原版的 `io.mpv.*` ProgID。
 - 文件关联的扩展名列表从 `portable_config\script-opts\uosc.conf` 的
   `video_types` / `audio_types` / `image_types` / `subtitle_types` 读取。
+- `windows\umpv-register.ps1` / `umpv-unregister.ps1` 是独立的 umpv（单实例
+  播放器）注册脚本，只写 `HKCU`。它们使用独立的 ProgID `mpv-playkit.umpv`，
+  不会覆盖主安装器的 `mpv-playkit` 关联。
+
+## umpv 单实例启动
+
+包根的 `umpv.exe` 把文件交给同一个 mpv 窗口，适合设置成“打开方式”：
+
+```bat
+umpv.exe "D:\video\a.mkv" "D:\video\b.mkv"
+installer\windows\umpv-register.cmd
+```
+
+注册脚本只写当前用户，扩展名范围读取 `portable_config\script-opts\uosc.conf`；
+取消注册使用 `umpv-unregister.cmd`。端口、管道和 `replace/append` 行为由包根
+`umpv.conf` 控制，详见 [docs/umpv.md](../docs/umpv.md)。卸载主安装器时也会
+清理这些 umpv 专属注册项。
 
 ## Linux（预留接口）
 

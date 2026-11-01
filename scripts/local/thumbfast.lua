@@ -21,7 +21,14 @@ local options = {
 	network = true,
 	cache_dir = "~~/_cache/thumbfast",
 	timeout_seconds = 15,
-	hwdec = "no",
+	-- Keep the old option name working for existing user configs.
+	hwdec = "",
+	thumbnail_hwdec = "no",
+	max_cache_files = 400,
+	max_cache_age_days = 30,
+	cache_cleanup_interval = 300,
+	failure_limit = 3,
+	retry_seconds = 60,
 }
 mp_options.read_options(options, "thumbfast")
 
@@ -47,7 +54,28 @@ local state = {
 	request = nil,
 	visible = false,
 	failures = 0,
+	suspended_until = 0,
+	last_cleanup = 0,
 }
+
+local IMAGE_EXTENSIONS = {
+	apng = true, avif = true, bmp = true, gif = true, jfif = true,
+	jpeg = true, jpg = true, jxl = true, png = true, svg = true,
+	tif = true, tiff = true, webp = true,
+}
+
+local function available()
+	if not state.loaded or not state.enabled_by_user then return false end
+	if state.suspended_until and mp.get_time() < state.suspended_until then return false end
+	return true
+end
+
+local function hwdec_mode()
+	local configured = tostring(options.thumbnail_hwdec or "")
+	if configured == "" then configured = tostring(options.hwdec or "") end
+	if configured == "" then return "no" end
+	return configured
+end
 
 local function expand(path)
 	return mp.command_native({ "expand-path", path })
@@ -149,12 +177,81 @@ end
 local function cache_key()
 	local path = state.path or ""
 	local size = mp.get_property_number("file-size", 0) or 0
-	local raw = string.format("%s|%.0f|%.3f", path, size, state.duration)
+	local info = utils.file_info(state.path or "")
+	local mtime = info and tonumber(info.mtime) or 0
+	local raw = string.format("%s|%.0f|%.3f|%.0f", path, size, state.duration, mtime)
 	local hash = 5381
 	for index = 1, #raw do
 		hash = (hash * 33 + raw:byte(index)) % 4294967296
 	end
 	return string.format("%08x", hash)
+end
+
+local function cache_entries()
+	local files = utils.readdir(cache_root, "files")
+	if not files then return {} end
+	local entries = {}
+	for _, name in ipairs(files) do
+		local base = string.match(name, "^(%x%x%x%x%x%x%x%x)%-%d+%.bgra$")
+		if base then
+			local entry = entries[base]
+			if not entry then
+				entry = { base = base, files = {} }
+				entries[base] = entry
+			end
+			entry.files[#entry.files + 1] = name
+		end
+	end
+	return entries
+end
+
+local function remove_entry(entry)
+	for _, name in ipairs(entry.files) do
+		pcall(os.remove, utils.join_path(cache_root, name))
+		pcall(os.remove, utils.join_path(cache_root, name .. ".json"))
+	end
+end
+
+local function cleanup_cache()
+	if state.generating then return end
+	local now = os.time()
+	local max_age = math.max(0, tonumber(options.max_cache_age_days) or 0) * 86400
+	local max_files = math.max(1, math.floor(tonumber(options.max_cache_files) or 400))
+
+	local entries = {}
+	for _, entry in pairs(cache_entries()) do
+		local newest = 0
+		for _, name in ipairs(entry.files) do
+			local info = utils.file_info(utils.join_path(cache_root, name))
+			local mtime = info and tonumber(info.mtime) or 0
+			if mtime > newest then newest = mtime end
+		end
+		entry.mtime = newest
+		if max_age > 0 and newest > 0 and now - newest > max_age then
+			remove_entry(entry)
+		else
+			entries[#entries + 1] = entry
+		end
+	end
+
+	if #entries > max_files then
+		table.sort(entries, function(left, right) return left.mtime < right.mtime end)
+		for index = 1, #entries - max_files do
+			remove_entry(entries[index])
+		end
+	end
+	state.last_cleanup = mp.get_time()
+end
+
+local function maybe_cleanup()
+	local interval = math.max(30, tonumber(options.cache_cleanup_interval) or 300)
+	if state.last_cleanup > 0 and mp.get_time() - state.last_cleanup < interval then return end
+	if not ensure_dir(cache_root) then return end
+	local ok, err = pcall(cleanup_cache)
+	if not ok then
+		msg.warn("thumbnail cache cleanup failed: " .. tostring(err))
+		state.last_cleanup = mp.get_time()
+	end
 end
 
 local function send_info(width, height)
@@ -170,7 +267,7 @@ local function clear_overlay()
 end
 
 local function display(request, width, height, stride)
-	if not state.loaded or not state.enabled_by_user or not state.path then return end
+	if not available() or not state.path then return end
 	local ok, err = pcall(mp.command_native, {
 		"overlay-add",
 		overlay_id,
@@ -211,11 +308,26 @@ local function read_meta(path)
 	return width, height, stride
 end
 
-local function request_next()
+local function suspend_for_retry()
+	local retry = math.max(5, tonumber(options.retry_seconds) or 60)
+	state.suspended_until = mp.get_time() + retry
+	state.request = nil
+	send_info(0, 0)
+	msg.warn(string.format("pausing thumbnail generation for %d seconds after repeated failures", retry))
+	mp.add_timeout(retry, function()
+		state.suspended_until = 0
+		state.failures = 0
+		if state.loaded then send_info(state.width, state.height) end
+	end)
+end
 
+local function request_next()
 	if state.generating or not state.request then return end
 	local request = state.request
 	state.request = nil
+	if not available() then return end
+
+	maybe_cleanup()
 
 	local width, height, stride = read_meta(request.base .. ".bgra.json")
 	if width then
@@ -238,7 +350,7 @@ local function request_next()
 		"--no-osc",
 		"--no-input-default-bindings",
 		"--vo=null",
-		"--hwdec=" .. tostring(options.hwdec),
+		"--hwdec=" .. hwdec_mode(),
 		"--pause",
 		"--keep-open=yes",
 		"--start=" .. string.format("%.3f", request.time),
@@ -250,17 +362,17 @@ local function request_next()
 	}
 
 	local completed = false
+	local handle = nil
 	local function finish(ok)
 		if completed then return end
 		completed = true
 		state.generating = false
 		if not ok then
+			if state.request then state.request = nil end
 			state.failures = state.failures + 1
 			msg.warn("thumbnail subprocess failed for " .. tostring(state.path))
-			if state.failures >= 3 then
-				msg.warn("disabling thumbnails after repeated failures")
-				state.loaded = false
-				send_info(0, 0)
+			if state.failures >= math.max(1, tonumber(options.failure_limit) or 3) then
+				suspend_for_retry()
 			end
 		else
 			state.failures = 0
@@ -269,13 +381,13 @@ local function request_next()
 	end
 
 	mp.add_timeout(math.max(3, tonumber(options.timeout_seconds) or 15), function()
-		if state.generating and not completed then
-			msg.warn("thumbnail generation timed out")
-			finish(false)
-		end
+		if completed then return end
+		msg.warn("thumbnail generation timed out")
+		if handle then pcall(mp.abort_async_command, handle) end
+		finish(false)
 	end)
 
-	mp.command_native_async({
+	handle = mp.command_native_async({
 		name = "subprocess",
 		args = args,
 		playback_only = false,
@@ -292,11 +404,19 @@ local function request_next()
 			finish(false)
 			return
 		end
-		if state.loaded then
+		if available() then
 			display(request, w, h, s)
 		end
 		finish(true)
 	end)
+end
+
+local function is_still_image()
+	if mp.get_property_native("current-tracks/video/albumart") then return true end
+	if mp.get_property_native("current-tracks/video/image") then return true end
+	if mp.get_property_native("image") then return true end
+	local extension = tostring(state.path or ""):match("%.(%w+)$")
+	return extension ~= nil and IMAGE_EXTENSIONS[extension:lower()] == true
 end
 
 local function on_file_loaded()
@@ -307,8 +427,13 @@ local function on_file_loaded()
 	state.width, state.height = 0, 0
 	state.request = nil
 	state.failures = 0
+	state.suspended_until = 0
 
 	if not state.enabled_by_user or not state.path or state.path == "" then
+		send_info(0, 0)
+		return
+	end
+	if is_still_image() then
 		send_info(0, 0)
 		return
 	end
@@ -351,7 +476,7 @@ local function on_file_loaded()
 end
 
 local function on_thumb(time, x, y)
-	if not state.loaded or not state.enabled_by_user or not state.path then return end
+	if not available() or not state.path then return end
 	local target = tonumber(time)
 	local pos_x = tonumber(x)
 	local pos_y = tonumber(y)
@@ -372,7 +497,7 @@ end
 
 mp.register_script_message("thumb", on_thumb)
 mp.register_script_message("uosc-version", function()
-	if state.loaded then send_info(state.width, state.height) end
+	if available() then send_info(state.width, state.height) end
 end)
 mp.register_script_message("clear", function()
 	state.request = nil
@@ -382,6 +507,7 @@ mp.register_event("file-loaded", on_file_loaded)
 mp.register_event("end-file", function()
 	state.loaded = false
 	state.request = nil
+	state.suspended_until = 0
 	clear_overlay()
 end)
 mp.register_event("shutdown", function()
@@ -391,12 +517,14 @@ end)
 mp.add_key_binding(nil, "rerun", function()
 	clear_overlay()
 	state.failures = 0
+	state.suspended_until = 0
 	if state.loaded then send_info(state.width, state.height) end
 end)
 
 mp.add_key_binding(nil, "toggle", function()
 	state.enabled_by_user = not state.enabled_by_user
 	state.request = nil
+	state.suspended_until = 0
 	clear_overlay()
 	if state.enabled_by_user then
 		if state.loaded then send_info(state.width, state.height) end
