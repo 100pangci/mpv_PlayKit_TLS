@@ -343,8 +343,8 @@
       "version": "2026.10.26"
     }
   },
-  "generated_at": "2026-10-31T16:48:41Z",
-  "inputs_hash": "c88583de249e574f5f331230171736d7bb165487a11cd876595aa76e0828ac18",
+  "generated_at": "2026-11-01T00:43:35Z",
+  "inputs_hash": "8a3b335a70509389161474930707c2d274993ea6fbdc018e4d639efc36fcce62",
   "repository": "100pangci/mpv_PlayKit_TLS",
   "schema": 1
 }
