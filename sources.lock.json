@@ -108,16 +108,16 @@
       "version": "v0.41.0-1373-g9e2ed65eb"
     },
     "mpv-windows": {
-      "api_url": "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/assets/660943799",
-      "asset_id": 660943799,
-      "asset_name": "mpv-x86_64-20261021-git-e471496c56.7z",
-      "commit": "e471496c56f0f49c133bd88b50aed62b845f1909",
+      "api_url": "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/assets/696901230",
+      "asset_id": 696901230,
+      "asset_name": "mpv-x86_64-20261101-git-48fca90e8c.7z",
+      "commit": "48fca90e8ce5011d0a4c689178ad739329ea253d",
       "id": "mpv-windows",
       "kind": "binary",
       "license": {
         "files": [
           {
-            "commit": "e471496c56f0f49c133bd88b50aed62b845f1909",
+            "commit": "48fca90e8ce5011d0a4c689178ad739329ea253d",
             "license": "GPL-2.0-or-later",
             "path": "LICENSE.GPL",
             "repository": "mpv-player/mpv",
@@ -125,10 +125,10 @@
             "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
             "size": 17984,
             "source_path": "LICENSE.GPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/e471496c56f0f49c133bd88b50aed62b845f1909/LICENSE.GPL"
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/48fca90e8ce5011d0a4c689178ad739329ea253d/LICENSE.GPL"
           },
           {
-            "commit": "e471496c56f0f49c133bd88b50aed62b845f1909",
+            "commit": "48fca90e8ce5011d0a4c689178ad739329ea253d",
             "license": "LGPL-2.1-or-later",
             "path": "LICENSE.LGPL",
             "repository": "mpv-player/mpv",
@@ -136,7 +136,7 @@
             "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
             "size": 26410,
             "source_path": "LICENSE.LGPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/e471496c56f0f49c133bd88b50aed62b845f1909/LICENSE.LGPL"
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/48fca90e8ce5011d0a4c689178ad739329ea253d/LICENSE.LGPL"
           }
         ],
         "parts": [
@@ -156,15 +156,15 @@
         "windows-x64"
       ],
       "provides": "mpv",
-      "published_at": "2026-10-21T00:54:32Z",
+      "published_at": "2026-11-01T00:45:19Z",
       "release_mode": "latest",
-      "release_tag": "20261021",
-      "release_url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261021",
-      "sha256": "4a355f3e89c83fabc730d33fb4e759dfec747806ed2287b61a90d1681b83e8d3",
-      "size": 34025957,
+      "release_tag": "20261101",
+      "release_url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261101",
+      "sha256": "7a887a10b74c1a4a7e8c29ead8300cfc610c466c4686bf9dcb92ca2f224ba110",
+      "size": 34097441,
       "upstream": "shinchiro/mpv-winbuild-cmake",
-      "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261021/mpv-x86_64-20261021-git-e471496c56.7z",
-      "version": "20261021-git-e471496c56"
+      "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261101/mpv-x86_64-20261101-git-48fca90e8c.7z",
+      "version": "20261101-git-48fca90e8c"
     },
     "uosc": {
       "api_url": "https://api.github.com/repos/tomasklaen/uosc/releases/assets/500236844",
@@ -343,8 +343,8 @@
       "version": "2026.10.26"
     }
   },
-  "generated_at": "2026-10-31T16:48:41Z",
-  "inputs_hash": "c88583de249e574f5f331230171736d7bb165487a11cd876595aa76e0828ac18",
+  "generated_at": "2026-11-01T00:54:00Z",
+  "inputs_hash": "486369ec42a3c740cfead167bff52c1e5ee1959af932e1875067b6602136f982",
   "repository": "100pangci/mpv_PlayKit_TLS",
   "schema": 1
 }
