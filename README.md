@@ -75,7 +75,12 @@ GitHub Actions 每月 1 日 05:17 UTC 检查上游，采用事务式流程：
 
 `enabled=no` 时脚本不会发起任何网络请求，也不会启动更新器；`install_enabled=no`
 可以只关闭安装而保留检查。用户配置以语义 patch 保存在
-`portable_config/user/patches/`，新官方配置整体替换后 patch 会自动重新应用。
+`portable_config/user/patches/`（schema 2 行操作放在 `v2/`），新官方配置整体
+替换后 patch 会自动重新应用；正常更新不需要手动“应用 patch”。改完 patch 后
+重启播放器也会自动检测并重新应用：启动时尚未加载媒体的情况下，播放器会自动
+重启一次以加载新配置；已经加载媒体时只提示手动重启，避免丢失播放。
+`auto_repair=no` 可以关闭自动修复，`auto_repair_relaunch=no` 可以关闭自动重启。
+菜单中的“立即重新应用配置 patch”只用于改完 patch 后立即生效或手动迁移。
 详见 [自动更新文档](docs/updater.md) 与 [用户配置 Patch](docs/user-patches.md)。
 
 检查器通过 GitHub 公开 API 读取最新 Release；若仓库以后改为私有，匿名检测会

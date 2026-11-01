@@ -20,6 +20,8 @@ local opts = {
 	timeout_seconds = 12,
 	snooze_hours = 24,
 	install_enabled = true,
+	auto_repair = true,
+	auto_repair_relaunch = "auto",
 	unmanaged = "capture",
 	relaunch = "auto",
 	wait_timeout = 600,
@@ -67,6 +69,7 @@ local state = {
 	snoozed_until = 0,
 	dismissed_version = "",
 	disabled = false,
+	last_repaired_version = "",
 }
 
 local function read_json_file(path, limit)
@@ -357,7 +360,8 @@ local function poll_update_status()
 	last_status_key = key
 	local message = tostring(status.message or "正在更新…")
 	if status.state == "installed" or status.state == "rolled-back"
-		or status.state == "repaired" or status.state == "captured" then
+		or status.state == "repaired" or status.state == "captured"
+		or status.state == "up-to-date" or status.state == "relaunched" then
 		stop_status_polling()
 		mp.osd_message(message, 8000)
 		return
@@ -389,7 +393,7 @@ local function start_status_polling()
 	end
 end
 
-local function run_helper(args)
+local function run_helper(args, on_success)
 	mp.command_native_async({
 		name = "subprocess",
 		args = args,
@@ -397,7 +401,10 @@ local function run_helper(args)
 		capture_stderr = true,
 		playback_only = false,
 	}, function(success, result)
-		if success and result and result.status == 0 then return end
+		if success and result and result.status == 0 then
+			if on_success then on_success() end
+			return
+		end
 		stop_status_polling()
 		local detail = ""
 		if result and type(result.stderr) == "string" and #result.stderr > 0 then
@@ -506,6 +513,21 @@ local function rollback_now()
 	})
 end
 
+local function repair_now()
+	if not updater_available() then return end
+	start_status_polling()
+	mp.osd_message("正在按当前版本重新应用配置 patch…", 3000)
+	run_helper({
+		helper_path,
+		"repair",
+		"--root", root_path,
+		"--quiet",
+	}, function()
+		state.last_repaired_version = local_version
+		write_state()
+	end)
+end
+
 mp.add_key_binding(nil, "check-now", function()
 	run_check(true)
 end)
@@ -513,6 +535,7 @@ end)
 mp.add_key_binding(nil, "install-now", install_now)
 mp.add_key_binding(nil, "capture-now", capture_now)
 mp.add_key_binding(nil, "rollback", rollback_now)
+mp.add_key_binding(nil, "repair-now", repair_now)
 
 mp.add_key_binding(nil, "open-release", function()
 	if valid_release_url(state.latest_url) then
@@ -542,6 +565,131 @@ mp.add_key_binding(nil, "reset", function()
 	mp.osd_message("已恢复 PlayKit 更新检查", 3000)
 	run_check(true)
 end)
+
+-- Reapply the user layer automatically when patch files (or user scripts,
+-- fonts and script options) changed since the last install, repair or capture.
+-- This is deliberately not part of run_check(): it performs no network request
+-- and is disabled together with the updater.
+local function auto_relaunch_allowed()
+	local mode = tostring(opts.auto_repair_relaunch or "auto"):lower()
+	if mode == "no" or mode == "false" or mode == "0" then return false end
+	if mode == "yes" or mode == "true" or mode == "1" then return true end
+	if mode ~= "auto" then return false end
+	-- Restarting while media is loaded would lose the current playback; leave
+	-- that case to the user and only restart an idle startup.
+	local path = mp.get_property("path")
+	if type(path) == "string" and path ~= "" then return false end
+	local count = tonumber(mp.get_property("playlist-count")) or 0
+	return count <= 0
+end
+
+local function start_relaunch()
+	local pid = current_pid()
+	if pid == "0" then
+		mp.osd_message("配置 patch 已重新应用，但无法确定播放器进程；请手动重启播放器", 10000)
+		return
+	end
+	mp.command_native_async({
+		name = "subprocess",
+		args = {
+			helper_path,
+			"relaunch",
+			"--root", root_path,
+			"--wait-pid", pid,
+			"--wait-timeout", wait_timeout(),
+			"--quiet",
+			"--detach",
+		},
+		capture_stdout = true,
+		capture_stderr = true,
+		playback_only = false,
+	}, function(success, result)
+		if not (success and result and result.status == 0) then
+			local detail = ""
+			if result and type(result.stderr) == "string" and #result.stderr > 0 then
+				detail = "：" .. result.stderr:sub(1, 200)
+			end
+			mp.msg.warn("update-check: could not start relaunch helper" .. detail)
+			mp.osd_message("配置 patch 已重新应用，但无法自动重启；请手动重启播放器", 10000)
+			return
+		end
+		mp.osd_message("配置 patch 已重新应用，正在重启播放器…", 5000)
+		mp.add_timeout(0.8, function()
+			mp.commandv("quit")
+		end)
+	end)
+end
+
+local function mark_repaired()
+	if state.last_repaired_version ~= local_version then
+		state.last_repaired_version = local_version
+		write_state()
+	end
+end
+
+local function finish_auto_repair(status)
+	mark_repaired()
+	if status == 0 then
+		if auto_relaunch_allowed() then
+			start_relaunch()
+		else
+			mp.osd_message("配置 patch 已重新应用；重启播放器后生效", 8000)
+		end
+	elseif status == 4 then
+		-- Repair ran, but the generated configuration is byte-identical (for
+		-- example the first fingerprint initialization after installation).
+		mp.msg.info("update-check: user layer repaired without configuration changes")
+	end
+end
+
+local function auto_repair_allowed()
+	if truthy_disabled(opts.auto_repair) or truthy_disabled(opts.install_enabled) then
+		return false
+	end
+	if state.disabled then return false end
+	if type(local_version) ~= "string" or local_version == "" then return false end
+	if type(root_path) ~= "string" or not file_exists(helper_path) then return false end
+	return true
+end
+
+if auto_repair_allowed() then
+	mp.add_timeout(6, function()
+		if not auto_repair_allowed() then return end
+		mp.msg.info("update-check: checking whether the user layer needs repair")
+		mp.command_native_async({
+			name = "subprocess",
+			args = { helper_path, "repair-auto", "--root", root_path, "--quiet" },
+			capture_stdout = true,
+			capture_stderr = true,
+			playback_only = false,
+		}, function(success, result)
+			local status = nil
+			if success and result then status = tonumber(result.status) end
+			-- repair-auto exits 0 (changed), 3 (nothing to do) or 4
+			-- (repaired without changing generated files).  Exit 64 means the
+			-- installed helper predates this command; skip silently rather
+			-- than running a full repair on every startup.
+			if status == 64 then
+				mp.msg.info("update-check: installed helper does not support automatic repair")
+				return
+			end
+			if status == 3 then
+				mark_repaired()
+				return
+			end
+			if status == 0 or status == 4 then
+				finish_auto_repair(status)
+				return
+			end
+			local detail = ""
+			if result and type(result.stderr) == "string" and #result.stderr > 0 then
+				detail = "：" .. result.stderr:sub(1, 200)
+			end
+			mp.msg.warn("update-check: automatic repair failed" .. detail)
+			mp.osd_message("用户配置自动修复失败，请查看 portable_config/.playkit/updater.log", 10000)
+		end)
+	end)
+end
 
 -- Delay the first check slightly so player startup is not competing with a
 -- subprocess.  run_check() returns immediately after spawning curl/wget.  When

@@ -101,14 +101,19 @@ gh release create --target <final_sha> ── 仅在此前全部成功时执行
 4. 校验包内 `playkit-version.json`、`manifest.json`、`playkit-inventory.json`
    的完整文件哈希，以及 `.playkit/state.json` 记录的官方基线。
 5. 等待 mpv 退出后，在同级 staging 目录复制新包、保留运行时状态、迁移
-   `portable_config/user/`、应用手动与自动 patch。
+   `portable_config/user/`、合并自动 patch、应用 schema 1/2 手动与自动 patch。
 6. 用两次重命名完成交换：`current → current.previous`，
    `staging → current`。失败时尝试恢复；成功后最多保留 current 与 previous。
 
 `.playkit/official/` 保存本版本官方配置基线，`.playkit/generated/` 保存应用
 patch 后最后写入的快照，二者用于捕获用户直接编辑和校验状态。用户 patch 是
-语义差异（set/remove/append），不是 unified diff；未出现在 patch 中的键跟随
-新官方配置。详见 [自动更新](updater.md) 与 [用户配置 Patch](user-patches.md)。
+语义差异（键操作和 schema 2 行操作），不是 unified diff；未出现在 patch 中的
+键跟随新官方配置。schema 2 文件放在 `user/patches/v2/`，自动 patch 放在
+`user/patches/auto/v2/`，旧 helper 会忽略这些子目录。`state.json` 还记录
+用户层（patch、用户脚本、字体、script-opts）的指纹；播放器启动时
+`repair --if-needed` 只在指纹变化或安装版本变化时重写配置，避免每次启动都
+重新生成文件。详见 [自动更新](updater.md) 与
+[用户配置 Patch](user-patches.md)。
 
 ## 确定性
 
@@ -222,7 +227,8 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
    AppImage 自更新/yt-dlp 下载 hook、运行时缓存和状态文件。
 3. `mpv.conf` 中 `~~/` 引用存在。
 4. `update-check.lua` 的 `enabled=no` 门禁位于任何 subprocess 调用之前。
-5. 更新器元数据：`protocol=1`、`patch_schema=1`、固定的 `user_layer` /
+5. 更新器元数据：`protocol=1`、`patch_schema=1`（兼容旧 helper 的桥接版本；
+   新 helper 同时接受 1/2）、`min_helper_version=1.0.0`、固定的 `user_layer` /
    `state_dir`、helper 资产名/版本/SHA-256/大小；Linux 上 helper 必须可执行。
 6. `playkit-inventory.json` 覆盖包内全部官方文件，哈希匹配；官方基线与生成配置
    相同；每个文件都可通过路径安全检查。

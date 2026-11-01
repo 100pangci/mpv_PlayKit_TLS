@@ -9,6 +9,11 @@ from .common import PLATFORM_OS, ROOT, fail, human_size, log, make_executable, r
 
 HELPER_CRATE = ROOT / "updater" / "helper"
 HELPER_NAME = "playkit-updater"
+# The release that introduces schema-2 patches still ships a helper whose
+# version is 1.1.0, but installations running 1.0.0 must be able to install it
+# first.  Keep the advertised minimum at 1.0.0 for this bridge release; the new
+# helper upgrades old auto patches and then repairs them into schema 2.
+MIN_HELPER_VERSION = "1.0.0"
 DEFAULT_TARGETS = {
     "windows-x64": "x86_64-pc-windows-msvc",
     "linux-x64": "x86_64-unknown-linux-musl",

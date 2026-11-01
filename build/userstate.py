@@ -20,10 +20,10 @@ USER_README = """mpv PlayKit 用户层
 
 配置修改
 --------
-把修改写进 user/patches/ 下以 .patch 结尾的文本文件。patch 只描述
+把修改写进 user/patches/v2/ 下以 .patch 结尾的文本文件。patch 只描述
 “和官方配置的差异”，不是旧配置文件的副本。示例：
 
-    schema=1
+    schema=2
     target=mpv.conf
 
     [global]
@@ -39,6 +39,28 @@ USER_README = """mpv PlayKit 用户层
     [section]      仅用于 profiles.conf
     [global]       文件顶部的全局作用域
 
+schema=2 还支持行操作，用来插入/删除/替换注释、uosc 菜单项等任意文本：
+
+    @after command:script-binding update-check/check-now
+    |# script-binding my-ui/refresh #! 更新 > 刷新订阅
+    @end
+
+    @replace menu:工具 > 按键绑定列表
+    |Ctrl+i script-binding uosc/keybinds #! 工具 > 我的按键
+    @end
+
+    @delete menu:更新 > 稍后提醒
+    @append
+    |# 用户自定义
+    |Ctrl+Alt+x script-binding my-ui/x #! 工具 > 我的工具
+    @end
+
+行操作选择器：menu:菜单路径、command:绑定命令、key:键、section:段名、
+line:整行文本。同一选择器有多处匹配时加 [n]，例如 command[2]:cycle pause。
+插入菜单项时优先用 command:，菜单文本以后做 i18n 时不会影响锚点。
+@splice remove=N insert=M 用于替换一段精确文本；@optional 把缺失目标降级为
+警告。schema=1 的旧 patch 仍可放在 user/patches/ 根目录。
+
 target 必须是下列之一：
     mpv.conf
     input.conf
@@ -52,9 +74,13 @@ input.conf 的写法与官方文件一致：
 删除一个官方按键绑定：
     -MBTN_BACK
 
+修改 patch 后重启播放器即可自动生效，不需要在菜单里手动应用。每次启动时
+更新器都会比较 patch、用户脚本、字体和 script-opts 是否变化；有变化就重新
+生成配置。启动时还没有加载媒体的话，播放器会自动重启一次以加载新配置。
+
 直接编辑官方配置也可以。下次检查更新或安装时，更新器会把你的改动捕获到
-user/patches/auto/ 下，并在应用新官方配置后重新应用。无法无损表达的改动
-（例如新增了无法解析的行）会中止更新，而不会静默覆盖。
+user/patches/auto/v2/ 下，并在应用新官方配置后重新应用。同一处同时修改
+配置键和注释的改动无法安全自动表达，会中止更新，请写成手动 patch。
 
 用户脚本、字体和脚本选项
 ------------------------
@@ -87,15 +113,19 @@ PATCHES_README = """用户配置 patch
 
 手动 patch 放在本目录（user/patches/），文件名约定为：
 
-    mpv.conf.patch
+    mpv.conf.patch                  schema 1（旧格式，仍支持）
     input.conf.patch
     profiles.conf.patch
     platform.conf.patch
     script-opts/<name>.conf.patch
+    v2/mpv.conf.patch               schema 2（推荐，支持行操作）
+    v2/input.conf.patch
+    v2/script-opts/<name>.conf.patch
 
-更新器按文件名把 patch 应用到对应的官方配置。user/patches/auto/ 是更新器
-捕获直接编辑后自动生成的 patch，会在每次捕获时重建；不要手动编辑它，也不要
-把它当作长期配置备份。格式说明见上一级 user/README.md。
+更新器按文件名把 patch 应用到对应的官方配置。schema 2 文件放在 v2/ 子目录，
+这样只认识 schema 1 的旧 helper 会忽略它们而不是中止更新。
+user/patches/auto/v2/ 是更新器捕获直接编辑后自动生成并合并的 patch；不要
+手动编辑它，也不要把它当作长期配置备份。格式说明见上一级 user/README.md。
 """
 
 SCRIPTS_README = """用户脚本

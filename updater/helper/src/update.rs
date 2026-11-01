@@ -13,7 +13,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::archive;
-use crate::config::{capture_diff, managed_kind, ConfigDoc, ParsedLine};
+use crate::config::{capture_patch, managed_kind, verify_capture, CapturedPatch, ConfigDoc};
 use crate::download::{
     fetch_metadata, sha256_of, verify_downloaded, DirFetcher, Fetcher, HttpFetcher, ReleaseLocation,
 };
@@ -21,15 +21,16 @@ use crate::manifest::{
     expected_asset_name, normalize_tag, parse_sha256sums, ReleaseManifest, MAX_ARCHIVE_BYTES,
     MAX_METADATA_BYTES,
 };
-use crate::patch::{PatchDoc, PatchEntry};
+use crate::patch::{PatchDoc, PatchItem, PatchOp};
 use crate::state::{
-    discover_managed, generated_dir, managed_targets, new_package_state, official_dir, state_path,
-    State, STATE_SCHEMA,
+    auto_patch_dir, auto_v2_patch_dir, discover_managed, generated_dir, managed_targets,
+    new_package_state, official_dir, patch_dir, patch_targets, state_path, user_layer_fingerprint,
+    v2_patch_dir, State, STATE_SCHEMA,
 };
 use crate::status::{Logger, Reporter};
 use crate::swap::{
     acquire_lock, check_writable, cleanup_stale_temp_dirs, perform_rollback, perform_swap,
-    prepare_staging, relaunch, wait_for_process, Layout,
+    prepare_staging, relaunch, try_acquire_lock, wait_for_process, Layout,
 };
 use crate::util::{
     atomic_write, compare_versions, copy_file, copy_tree_merge, ensure_dir, human_size, io_context,
@@ -358,7 +359,6 @@ fn install_stage(
         },
         &mut warnings,
     )?;
-    write_auto_patches(&staged_portable.join("user"), &captured)?;
     preserve_runtime(
         &current_portable,
         &staged_portable,
@@ -366,7 +366,11 @@ fn install_stage(
         new_inventory.as_ref(),
         &mut warnings,
     )?;
-    let user_assets = install_user_assets(&staged_portable, &mut warnings)?;
+    // Capture runs against the current installation, but the patch files must
+    // be written after the user layer has been copied into staging.  Writing
+    // earlier lets the copy overwrite the fresh capture with an older one.
+    merge_auto_patches(&staged_portable.join("user"), &captured)?;
+    let user_assets = install_user_assets(&staged_portable, None, &mut warnings)?;
     let applied = apply_patches(
         &staged_portable,
         &staged_portable.join("user"),
@@ -514,13 +518,13 @@ struct CaptureContext<'a> {
 fn capture_user_edits(
     context: &CaptureContext<'_>,
     warnings: &mut Vec<String>,
-) -> Result<BTreeMap<String, Vec<PatchEntry>>> {
+) -> Result<BTreeMap<String, CapturedPatch>> {
     let mut targets: BTreeSet<String> =
         managed_targets(context.current_portable, context.state_old)
             .into_iter()
             .collect();
     targets.extend(discover_managed(context.fallback_portable));
-    let mut captured: BTreeMap<String, Vec<PatchEntry>> = BTreeMap::new();
+    let mut captured: BTreeMap<String, CapturedPatch> = BTreeMap::new();
     let mut conflicts: Vec<String> = Vec::new();
     let mut migration_warned = false;
 
@@ -600,14 +604,8 @@ fn capture_user_edits(
             Some(path) => ConfigDoc::read(path, kind)?,
             None => ConfigDoc::parse("", kind)?,
         };
-        let unrepresentable = unrepresentable_lines(&current_doc, &baseline_doc);
-        if !unrepresentable.is_empty() {
-            return Err(Failure::blocked(
-                "检测到无法转换为用户 patch 的配置行，更新已停止。",
-                format!("{target}: {}", unrepresentable.join(" | ")),
-            ));
-        }
-        let entries = capture_diff(&current_doc, &baseline_doc);
+        let captured_patch = capture_patch(&current_doc, &baseline_doc)?;
+        verify_capture(&current_doc, &baseline_doc, &captured_patch)?;
         if current_exists {
             let backup = context
                 .target_user_dir
@@ -618,13 +616,13 @@ fn capture_user_edits(
                 copy_file(&current_path, &backup)?;
             }
         }
-        if entries.is_empty() {
+        if captured_patch.is_empty() {
             warnings.push(format!(
-                "{target}: 检测到格式或注释变化，但没有可表达的配置意图；原文件已备份。"
+                "{target}: 检测到格式变化，但没有可表达的配置意图；原文件已备份。"
             ));
             continue;
         }
-        captured.insert(target, entries);
+        captured.insert(target, captured_patch);
     }
 
     if !conflicts.is_empty() {
@@ -665,51 +663,159 @@ fn baseline_for_target(context: &CaptureContext<'_>, target: &str) -> Option<Pat
     None
 }
 
-fn unrepresentable_lines(current: &ConfigDoc, baseline: &ConfigDoc) -> Vec<String> {
-    fn collect(doc: &ConfigDoc) -> BTreeMap<String, usize> {
-        let mut map = BTreeMap::new();
-        for line in &doc.lines {
-            if matches!(line.parsed, ParsedLine::Other) {
-                *map.entry(line.raw.trim().to_string()).or_insert(0) += 1;
-            }
-        }
-        map
-    }
-    let current_lines = collect(current);
-    let baseline_lines = collect(baseline);
-    let mut result = Vec::new();
-    for (line, count) in &current_lines {
-        if baseline_lines.get(line).copied().unwrap_or(0) < *count {
-            result.push(format!("+{line}"));
-        }
-    }
-    for (line, count) in &baseline_lines {
-        if current_lines.get(line).copied().unwrap_or(0) < *count {
-            result.push(format!("-{line}"));
-        }
-    }
-    result.truncate(10);
-    result
-}
-
-fn write_auto_patches(user_dir: &Path, captured: &BTreeMap<String, Vec<PatchEntry>>) -> Result<()> {
+/// Merge old automatic patches with the newly captured operations and write a
+/// schema-2 patch set.  Old schema-1 automatic patches are folded in and then
+/// removed so the new helper has a single source of truth; the previous
+/// installation directory (used by rollback) still keeps its own copy.
+fn merge_auto_patches(user_dir: &Path, captured: &BTreeMap<String, CapturedPatch>) -> Result<()> {
     let auto = user_dir.join("patches").join("auto");
-    remove_dir_all_retry(&auto)?;
-    ensure_dir(&auto)?;
-    for (target, entries) in captured {
-        if entries.is_empty() {
+    let auto_v2 = auto.join("v2");
+    ensure_dir(&auto_v2)?;
+
+    let mut documents: BTreeMap<String, Vec<PatchItem>> = BTreeMap::new();
+    let mut old_schema1: Vec<PathBuf> = Vec::new();
+    let mut old_schema1_files: Vec<(PathBuf, String)> = Vec::new();
+    collect_auto_files(&auto, Some(&auto_v2), &mut old_schema1_files)?;
+    for (path, target) in old_schema1_files {
+        let Some(kind) = managed_kind(&target) else {
+            continue;
+        };
+        let doc = PatchDoc::load(&path, &target, kind)?;
+        documents.entry(target).or_default().extend(doc.items);
+        old_schema1.push(path);
+    }
+    let mut old_v2_files: Vec<(PathBuf, String)> = Vec::new();
+    collect_auto_files(&auto_v2, None, &mut old_v2_files)?;
+    for (path, target) in old_v2_files {
+        let Some(kind) = managed_kind(&target) else {
+            continue;
+        };
+        let doc = PatchDoc::load(&path, &target, kind)?;
+        documents.entry(target).or_default().extend(doc.items);
+    }
+    for (target, patch) in captured {
+        documents
+            .entry(target.clone())
+            .or_default()
+            .extend(patch.items());
+    }
+
+    for (target, items) in documents {
+        let Some(kind) = managed_kind(&target) else {
+            continue;
+        };
+        let items = compact_auto_items(items, kind);
+        let path = auto_v2.join(format!("{target}.patch"));
+        if items.is_empty() {
+            if path.is_file() {
+                fs::remove_file(&path)
+                    .map_err(|error| io_context(&format!("remove {}", path.display()), error))?;
+            }
             continue;
         }
         let doc = PatchDoc {
             schema: crate::patch::PATCH_SCHEMA,
             target: Some(target.clone()),
             source: format!("auto:{target}"),
-            entries: entries.clone(),
+            items,
         };
-        let path = auto.join(format!("{target}.patch"));
         atomic_write(&path, doc.render().as_bytes())?;
     }
+    for path in old_schema1 {
+        fs::remove_file(&path)
+            .map_err(|error| io_context(&format!("remove {}", path.display()), error))?;
+    }
     Ok(())
+}
+
+/// Collect `.patch` files under an automatic patch directory.  Targets such as
+/// `script-opts/uosc.conf` are stored in nested directories, so a top-level
+/// directory scan is not enough.  `skip` excludes the sibling `v2` subtree when
+/// walking the schema-1 root.
+fn collect_auto_files(
+    root: &Path,
+    skip: Option<&Path>,
+    out: &mut Vec<(PathBuf, String)>,
+) -> Result<()> {
+    if !root.is_dir() {
+        return Ok(());
+    }
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let entries = fs::read_dir(&directory)
+            .map_err(|error| io_context(&format!("read {}", directory.display()), error))?;
+        for entry in entries {
+            let entry = entry
+                .map_err(|error| io_context(&format!("read {}", directory.display()), error))?;
+            let path = entry.path();
+            if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+                if skip.map(|skip| path == skip).unwrap_or(false) {
+                    continue;
+                }
+                pending.push(path);
+                continue;
+            }
+            if !entry
+                .file_type()
+                .map(|kind| kind.is_file())
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            if path.extension().and_then(|ext| ext.to_str()) != Some("patch") {
+                continue;
+            }
+            let relative = path
+                .strip_prefix(root)
+                .map_err(|error| Failure::internal(format!("auto patch path: {error}")))?;
+            let text = relative.to_string_lossy().replace('\\', "/");
+            let Some(target) = text.strip_suffix(".patch") else {
+                continue;
+            };
+            if managed_kind(target).is_some() {
+                out.push((path, target.to_string()));
+            }
+        }
+    }
+    out.sort_by(|left, right| left.1.cmp(&right.1));
+    Ok(())
+}
+
+/// Automatic patches are generated, so repeated captures must not grow without
+/// bound.  A later key operation fully determines the final value; keep only
+/// the last one per key.  Line operations stay in order because they describe a
+/// sequence of edits.  `+key` (append) is preserved verbatim.
+fn compact_auto_items(items: Vec<PatchItem>, kind: crate::config::ConfigKind) -> Vec<PatchItem> {
+    let mut last_key: BTreeMap<(Option<String>, String), usize> = BTreeMap::new();
+    for (index, item) in items.iter().enumerate() {
+        if let PatchItem::Key(entry) = item {
+            if entry.op != PatchOp::Append {
+                last_key.insert(
+                    (entry.section.clone(), normalize_patch_key(kind, &entry.key)),
+                    index,
+                );
+            }
+        }
+    }
+    items
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, item)| match &item {
+            PatchItem::Key(entry) if entry.op != PatchOp::Append => {
+                let lookup = (entry.section.clone(), normalize_patch_key(kind, &entry.key));
+                (last_key.get(&lookup).copied() == Some(index)).then_some(item)
+            }
+            _ => Some(item),
+        })
+        .collect()
+}
+
+fn normalize_patch_key(kind: crate::config::ConfigKind, key: &str) -> String {
+    if kind == crate::config::ConfigKind::Input {
+        key.to_ascii_lowercase()
+    } else {
+        key.to_string()
+    }
 }
 
 fn preserve_runtime(
@@ -847,41 +953,63 @@ struct UserAssets {
     scripts: Vec<String>,
     fonts: Vec<String>,
     script_opts: Vec<String>,
+    changed: bool,
 }
 
-fn install_user_assets(portable: &Path, warnings: &mut Vec<String>) -> Result<UserAssets> {
+fn install_user_assets(
+    portable: &Path,
+    old_state: Option<&State>,
+    warnings: &mut Vec<String>,
+) -> Result<UserAssets> {
     let user = portable.join("user");
+    let scripts = old_state.map(|state| state.user_scripts.as_slice());
+    let fonts = old_state.map(|state| state.user_fonts.as_slice());
+    let script_opts = old_state.map(|state| state.user_script_opts.as_slice());
+    let (scripts, scripts_changed) = copy_user_tree(
+        &user.join("scripts"),
+        &portable.join("scripts"),
+        "用户脚本",
+        scripts,
+        warnings,
+    )?;
+    let (fonts, fonts_changed) = copy_user_tree(
+        &user.join("fonts"),
+        &portable.join("fonts"),
+        "用户字体",
+        fonts,
+        warnings,
+    )?;
+    let (script_opts, script_opts_changed) = copy_user_tree(
+        &user.join("script-opts"),
+        &portable.join("script-opts"),
+        "用户 script-opts",
+        script_opts,
+        warnings,
+    )?;
     Ok(UserAssets {
-        scripts: copy_user_tree(
-            &user.join("scripts"),
-            &portable.join("scripts"),
-            "用户脚本",
-            warnings,
-        )?,
-        fonts: copy_user_tree(
-            &user.join("fonts"),
-            &portable.join("fonts"),
-            "用户字体",
-            warnings,
-        )?,
-        script_opts: copy_user_tree(
-            &user.join("script-opts"),
-            &portable.join("script-opts"),
-            "用户 script-opts",
-            warnings,
-        )?,
+        scripts,
+        fonts,
+        script_opts,
+        changed: scripts_changed || fonts_changed || script_opts_changed,
     })
 }
 
+/// Copy user assets into the generated configuration.  During a fresh install
+/// any existing target is an official file, so a same-name user file is a
+/// conflict.  During in-place repair, a target listed in the previous state is
+/// a copy of this same user asset and may be refreshed after the user edited
+/// it.
 fn copy_user_tree(
     source: &Path,
     destination: &Path,
     label: &str,
+    replaceable: Option<&[String]>,
     warnings: &mut Vec<String>,
-) -> Result<Vec<String>> {
+) -> Result<(Vec<String>, bool)> {
     let mut result = Vec::new();
+    let mut changed = false;
     if !source.is_dir() {
-        return Ok(result);
+        return Ok((result, changed));
     }
     let mut pending = vec![source.to_path_buf()];
     while let Some(directory) = pending.pop() {
@@ -907,19 +1035,45 @@ fn copy_user_tree(
             let relative = path
                 .strip_prefix(source)
                 .map_err(|error| Failure::internal(format!("user asset path: {error}")))?;
+            let relative_text = relative.to_string_lossy().replace('\\', "/");
+            // The package ships README.md placeholders in the user asset
+            // directories.  They are documentation, not scripts/fonts/options,
+            // and copying them would make the first startup look like a user
+            // change.
+            if relative_text.eq_ignore_ascii_case("README.md") {
+                continue;
+            }
             let target = destination.join(relative);
             if target.exists() {
+                let listed = replaceable
+                    .map(|paths| paths.iter().any(|item| item == &relative_text))
+                    .unwrap_or(false);
+                // Repair runs against an installation where user assets were
+                // already copied once.  An identical file is not a conflict.
+                if target.is_file() && sha256_file(&path)? == sha256_file(&target)? {
+                    if listed {
+                        result.push(relative_text);
+                    }
+                    continue;
+                }
+                if listed {
+                    copy_file(&path, &target)?;
+                    changed = true;
+                    result.push(relative_text);
+                    continue;
+                }
                 return Err(Failure::blocked(
                     format!("{label}与官方文件同名，更新已停止。"),
                     format!("{} conflicts with {}", path.display(), target.display()),
                 ));
             }
             copy_file(&path, &target)?;
-            result.push(relative.to_string_lossy().replace('\\', "/"));
+            changed = true;
+            result.push(relative_text);
         }
     }
     result.sort();
-    Ok(result)
+    Ok((result, changed))
 }
 
 fn apply_patches(
@@ -949,17 +1103,16 @@ fn apply_patches(
             atomic_write(&official_path, b"")?;
         }
         let mut doc = ConfigDoc::read(&official_path, kind)?;
-        let manual = user_dir.join("patches").join(format!("{target}.patch"));
-        let auto = user_dir
-            .join("patches")
-            .join("auto")
-            .join(format!("{target}.patch"));
+        let manual = patch_dir(portable).join(format!("{target}.patch"));
+        let automatic = auto_patch_dir(portable).join(format!("{target}.patch"));
+        let manual_v2 = v2_patch_dir(portable).join(format!("{target}.patch"));
+        let automatic_v2 = auto_v2_patch_dir(portable).join(format!("{target}.patch"));
         let mut had_patch = false;
         // Automatic patches capture direct edits to generated files, while
-        // manual patches describe the user's long-term intent.  Apply the
-        // automatic one first so an explicit manual patch always wins when
-        // both touch the same key.
-        for patch_path in [&auto, &manual] {
+        // manual patches describe the user's long-term intent.  Apply every
+        // automatic patch first so an explicit manual patch always wins when
+        // both touch the same line or key.
+        for patch_path in [&automatic, &automatic_v2, &manual, &manual_v2] {
             if !patch_path.is_file() {
                 continue;
             }
@@ -975,7 +1128,13 @@ fn apply_patches(
         if had_patch {
             applied.insert(target.clone());
         }
-        doc.write(&config_path)?;
+        // Without a patch the file was just copied from the official baseline.
+        // Avoid rewriting it, so formatting-only changes do not make a repair
+        // look like a configuration change.  The fallback still creates a file
+        // for an otherwise empty target.
+        if had_patch || !config_path.is_file() {
+            doc.write(&config_path)?;
+        }
         let generated_path = generated_dir(portable).join(&target);
         copy_file(&config_path, &generated_path)?;
         if !official_path.is_file() {
@@ -988,11 +1147,12 @@ fn apply_patches(
 fn warn_unknown_patch_files(user_dir: &Path, warnings: &mut Vec<String>) -> Result<()> {
     let patches = user_dir.join("patches");
     let auto = patches.join("auto");
-    for root in [patches.clone(), auto.clone()] {
+    let v2 = patches.join("v2");
+    let auto_v2 = auto.join("v2");
+    for root in [patches.clone(), auto.clone(), v2.clone(), auto_v2.clone()] {
         if !root.is_dir() {
             continue;
         }
-        let skip_auto = root == patches;
         let mut pending = vec![root.clone()];
         while let Some(directory) = pending.pop() {
             let entries = fs::read_dir(&directory)
@@ -1002,9 +1162,9 @@ fn warn_unknown_patch_files(user_dir: &Path, warnings: &mut Vec<String>) -> Resu
                     .map_err(|error| io_context(&format!("read {}", directory.display()), error))?;
                 let path = entry.path();
                 if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                    // `auto` is walked as its own root, with its own relative
-                    // paths; skip it while walking manual patches.
-                    if skip_auto && path == auto {
+                    // `auto` and both `v2` directories are walked as their own
+                    // roots with their own relative paths.
+                    if path == auto || path == v2 || path == auto_v2 {
                         continue;
                     }
                     pending.push(path);
@@ -1076,6 +1236,7 @@ fn finalize_state(
     }
     state.official = official_hashes;
     state.generated = generated_hashes;
+    state.user_fingerprint = Some(user_layer_fingerprint(portable, version, platform)?);
     state.save(portable)
 }
 
@@ -1154,56 +1315,151 @@ fn capture_inner(options: &CaptureOptions, layout: &Layout) -> Result<CaptureRep
         &mut warnings,
     )?;
     if !options.dry_run {
-        write_auto_patches(&portable.join("user"), &captured)?;
+        merge_auto_patches(&portable.join("user"), &captured)?;
+        refresh_after_capture(&portable, &version, platform)?;
     }
     Ok(CaptureReport {
         targets: captured
             .iter()
-            .map(|(target, entries)| (target.clone(), entries.len()))
+            .map(|(target, patch)| (target.clone(), patch.len()))
             .collect(),
         warnings,
         dry_run: options.dry_run,
     })
 }
 
+/// Capture records the current files as the new generated baseline.  Without
+/// this, the next repair would see a file that differs from both the official
+/// baseline and the old generated snapshot and refuse to run, even though the
+/// difference was just captured into an automatic patch.
+fn refresh_after_capture(portable: &Path, version: &str, platform: &str) -> Result<()> {
+    let Some(mut state) = State::load(portable)? else {
+        return Ok(());
+    };
+    let mut generated_hashes = BTreeMap::new();
+    for target in discover_managed(portable) {
+        let config_path = portable.join(&target);
+        if !config_path.is_file() {
+            continue;
+        }
+        generated_hashes.insert(target.clone(), sha256_file(&config_path)?);
+        copy_file(&config_path, &generated_dir(portable).join(&target))?;
+    }
+    state.generated = generated_hashes;
+    state.patches = patch_targets(portable)?;
+    state.user_fingerprint = Some(user_layer_fingerprint(portable, version, platform)?);
+    state.save(portable)
+}
+
 #[derive(Debug, Clone)]
 pub struct RepairOptions {
     pub root: PathBuf,
     pub assume_official: bool,
+    /// Skip the whole repair when the user layer fingerprint still matches the
+    /// state written by the last install, repair or capture.
+    pub if_needed: bool,
+    /// Write `update-status.json`.  Automatic startup repair disables this so
+    /// it cannot overwrite the status of a user-initiated install/rollback.
+    pub report_status: bool,
     pub quiet: bool,
 }
 
-pub fn repair(options: &RepairOptions) -> Result<()> {
+#[derive(Debug, Clone, Serialize)]
+pub struct RepairReport {
+    pub repaired: bool,
+    /// True when repair changed generated configuration files or copied a new
+    /// version of a user asset.  The Lua script uses this to decide whether an
+    /// automatic restart would load anything new.
+    pub changed: bool,
+}
+
+pub fn repair(options: &RepairOptions) -> Result<RepairReport> {
     let layout = Layout::new(&options.root)?;
     let logger = Logger::new(layout.log_path(), options.quiet);
+    if !options.report_status {
+        let result = repair_inner(options, &layout);
+        match &result {
+            Ok(report) if report.repaired && report.changed => {
+                logger.info("repair-auto: changes applied")
+            }
+            Ok(report) if report.repaired => logger.info("repair-auto: no changes applied"),
+            Ok(_) => logger.info("repair-auto: up to date"),
+            Err(error) => logger.error(format!(
+                "repair-auto failed: {} ({})",
+                error.user, error.detail
+            )),
+        }
+        return result;
+    }
     let mut reporter = Reporter::new(&layout.root, None, logger);
-    reporter.set("repairing", "正在重新应用用户配置。", None);
+    reporter.set("repairing", "正在重新应用配置 patch。", None);
     let result = repair_inner(options, &layout);
     match &result {
-        Ok(()) => reporter.finish("repaired", "用户配置已重新应用。", None),
+        Ok(report) if !report.repaired => {
+            reporter.finish("up-to-date", "配置 patch 无需重新应用。", None)
+        }
+        Ok(_) => reporter.finish(
+            "repaired",
+            "配置 patch 已重新应用；重启播放器后生效。",
+            None,
+        ),
         Err(error) => reporter.finish("failed", error.user.clone(), Some(error.detail.clone())),
     }
     result
 }
 
-fn repair_inner(options: &RepairOptions, layout: &Layout) -> Result<()> {
-    let _lock = acquire_lock(layout)?;
+fn repair_inner(options: &RepairOptions, layout: &Layout) -> Result<RepairReport> {
     let platform = detect_platform(&layout.root, None)?;
     let version = read_install_version(&layout.root, platform)?;
     let portable = layout.root.join("portable_config");
+    if options.if_needed {
+        if let Some(state) = State::load(&portable)? {
+            let fingerprint = user_layer_fingerprint(&portable, &version, platform)?;
+            if state.user_fingerprint.as_deref() == Some(fingerprint.as_str())
+                && state.installed_version == version
+                && state.platform == platform
+                && state_has_snapshots(&portable, &state)
+            {
+                return Ok(RepairReport {
+                    repaired: false,
+                    changed: false,
+                });
+            }
+        }
+    }
+    let _lock = match try_acquire_lock(layout)? {
+        Some(lock) => lock,
+        None if options.if_needed => {
+            // An install or rollback owns the lock.  It will write a fresh
+            // fingerprint itself; do not interfere or report a failure.
+            return Ok(RepairReport {
+                repaired: false,
+                changed: false,
+            });
+        }
+        None => {
+            return Err(Failure::blocked(
+                "另一个更新正在进行，请稍后重试。",
+                format!("{}: lock is held", layout.lock_path().display()),
+            ))
+        }
+    };
     let old_state = State::load(&portable)?;
     let mut warnings = Vec::new();
     let timestamp = utc_now_iso().replace([':', '-'], "");
     let mut targets: BTreeSet<String> = discover_managed(&portable).into_iter().collect();
+    targets.extend(patch_targets(&portable)?);
     if let Some(state) = &old_state {
         targets.extend(state.official.keys().cloned());
+        targets.extend(state.generated.keys().cloned());
     }
-    for target in targets {
-        let Some(kind) = managed_kind(&target) else {
+    let before = managed_config_hashes(&portable, &targets)?;
+    for target in &targets {
+        let Some(kind) = managed_kind(target) else {
             continue;
         };
-        let config_path = portable.join(&target);
-        let official_path = official_dir(&portable).join(&target);
+        let config_path = portable.join(target);
+        let official_path = official_dir(&portable).join(target);
         if !config_path.is_file() || !official_path.is_file() {
             continue;
         }
@@ -1212,7 +1468,7 @@ fn repair_inner(options: &RepairOptions, layout: &Layout) -> Result<()> {
         let differs_from_official = current.render() != official.render();
         let differs_from_generated = old_state
             .as_ref()
-            .and_then(|state| state.generated.get(&target))
+            .and_then(|state| state.generated.get(target))
             .map(|hash| sha256_file(&config_path).map(|actual| &actual != hash))
             .transpose()?
             .unwrap_or(false);
@@ -1221,7 +1477,7 @@ fn repair_inner(options: &RepairOptions, layout: &Layout) -> Result<()> {
                 .join("user")
                 .join("backup")
                 .join(format!("repair-{timestamp}"))
-                .join(&target);
+                .join(target);
             copy_file(&config_path, &backup)?;
             if !options.assume_official {
                 return Err(Failure::blocked(
@@ -1234,8 +1490,12 @@ fn repair_inner(options: &RepairOptions, layout: &Layout) -> Result<()> {
             warnings.push(format!("repair 前已备份未托管修改：{target}"));
         }
     }
-    let assets = install_user_assets(&portable, &mut warnings)?;
+    let assets = install_user_assets(&portable, old_state.as_ref(), &mut warnings)?;
+    // Migrate schema-1 automatic patches left by an older helper.  An empty
+    // capture set preserves every existing automatic operation.
+    merge_auto_patches(&portable.join("user"), &BTreeMap::new())?;
     let applied = apply_patches(&portable, &portable.join("user"), &mut warnings)?;
+    let after = managed_config_hashes(&portable, &targets)?;
     let previous = old_state
         .as_ref()
         .map(|state| state.installed_version.clone())
@@ -1243,7 +1503,72 @@ fn repair_inner(options: &RepairOptions, layout: &Layout) -> Result<()> {
     finalize_state(
         &portable, &version, &previous, platform, &applied, &assets, &warnings,
     )?;
-    Ok(())
+    Ok(RepairReport {
+        repaired: true,
+        changed: before != after || assets.changed,
+    })
+}
+
+fn state_has_snapshots(portable: &Path, state: &State) -> bool {
+    state
+        .official
+        .keys()
+        .all(|target| official_dir(portable).join(target).is_file())
+        && state
+            .generated
+            .keys()
+            .all(|target| generated_dir(portable).join(target).is_file())
+}
+
+fn managed_config_hashes(
+    portable: &Path,
+    targets: &BTreeSet<String>,
+) -> Result<BTreeMap<String, Option<String>>> {
+    let mut result = BTreeMap::new();
+    for target in targets {
+        let path = portable.join(target);
+        result.insert(
+            target.clone(),
+            if path.is_file() {
+                Some(sha256_file(&path)?)
+            } else {
+                None
+            },
+        );
+    }
+    Ok(result)
+}
+
+#[derive(Debug, Clone)]
+pub struct RelaunchOptions {
+    pub root: PathBuf,
+    pub wait_pid: u32,
+    pub wait_timeout: Duration,
+    pub quiet: bool,
+}
+
+/// Wait for the current player process to exit, then start it again.  Used by
+/// `update-check.lua` after an automatic repair changed the generated
+/// configuration: the current process has already read the old files.
+pub fn relaunch_player(options: &RelaunchOptions) -> Result<()> {
+    let layout = Layout::new(&options.root)?;
+    let logger = Logger::new(layout.log_path(), options.quiet);
+    logger.info(format!("relaunch: waiting for pid {}", options.wait_pid));
+    let result = (|| -> Result<()> {
+        let platform = detect_platform(&layout.root, None)?;
+        if options.wait_pid != 0 {
+            wait_for_process(options.wait_pid, options.wait_timeout)?;
+        }
+        relaunch(&layout, platform)
+    })();
+    match &result {
+        Ok(()) => logger.info("relaunch: player started"),
+        Err(error) => logger.error(format!(
+            "relaunch failed: {} ({})",
+            error.user, error.detail
+        )),
+    }
+    result
 }
 
 #[derive(Debug, Clone)]
@@ -1353,25 +1678,112 @@ pub fn read_status_file(root: &Path) -> Result<Option<crate::status::Status>> {
 mod tests {
     use super::*;
     use crate::config::ConfigKind;
+    use tempfile::tempdir;
 
     fn doc(text: &str) -> ConfigDoc {
         ConfigDoc::parse(text, ConfigKind::Mpv).unwrap()
     }
 
     #[test]
-    fn unrepresentable_detects_unknown_lines() {
-        let current = doc("volume=70\nsome command without equals\n");
-        let baseline = doc("volume=100\n");
-        let lines = unrepresentable_lines(&current, &baseline);
-        assert_eq!(lines.len(), 1);
-        assert!(lines[0].starts_with('+'));
+    fn compact_auto_items_keeps_last_key_operation() {
+        let items = vec![
+            PatchItem::Key(crate::patch::PatchEntry {
+                section: None,
+                key: "volume".into(),
+                op: PatchOp::Set,
+                value: "60".into(),
+                line: 0,
+            }),
+            PatchItem::Key(crate::patch::PatchEntry {
+                section: None,
+                key: "volume".into(),
+                op: PatchOp::Set,
+                value: "70".into(),
+                line: 0,
+            }),
+        ];
+        let compacted = compact_auto_items(items, ConfigKind::Mpv);
+        assert_eq!(compacted.len(), 1);
+        match &compacted[0] {
+            PatchItem::Key(entry) => assert_eq!(entry.value, "70"),
+            _ => panic!("expected key operation"),
+        }
     }
 
     #[test]
-    fn comments_are_not_unrepresentable() {
-        let current = doc("# my note\nvolume=70\n");
-        let baseline = doc("# official note\nvolume=100\n");
-        assert!(unrepresentable_lines(&current, &baseline).is_empty());
+    fn merge_auto_patches_converts_schema_one_and_keeps_newest_key() {
+        let dir = tempdir().unwrap();
+        let user = dir.path().join("user");
+        atomic_write(
+            &user.join("patches/auto/mpv.conf.patch"),
+            b"schema=1\ntarget=mpv.conf\nvolume=60\n",
+        )
+        .unwrap();
+        atomic_write(
+            &user.join("patches/auto/v2/mpv.conf.patch"),
+            b"schema=2\ntarget=mpv.conf\n@append\n|# keep me\n@end\n",
+        )
+        .unwrap();
+        atomic_write(
+            &user.join("patches/auto/script-opts/uosc.conf.patch"),
+            b"schema=1\ntarget=script-opts/uosc.conf\nbackground-color=#000000C0\n",
+        )
+        .unwrap();
+        let mut captured = BTreeMap::new();
+        captured.insert(
+            "mpv.conf".to_string(),
+            CapturedPatch {
+                keys: vec![crate::patch::PatchEntry {
+                    section: None,
+                    key: "volume".into(),
+                    op: PatchOp::Set,
+                    value: "70".into(),
+                    line: 0,
+                }],
+                lines: Vec::new(),
+            },
+        );
+
+        merge_auto_patches(&user, &captured).unwrap();
+
+        assert!(!user.join("patches/auto/mpv.conf.patch").exists());
+        let text = fs::read_to_string(user.join("patches/auto/v2/mpv.conf.patch")).unwrap();
+        assert!(text.contains("schema=2"), "{text}");
+        assert!(text.contains("volume=70"), "{text}");
+        assert!(!text.contains("volume=60"), "{text}");
+        assert!(text.contains("# keep me"), "{text}");
+        assert!(!user
+            .join("patches/auto/script-opts/uosc.conf.patch")
+            .exists());
+        let uosc =
+            fs::read_to_string(user.join("patches/auto/v2/script-opts/uosc.conf.patch")).unwrap();
+        assert!(uosc.contains("background-color=#000000C0"), "{uosc}");
+    }
+
+    #[test]
+    fn merge_auto_patches_keeps_existing_v2_when_nothing_changed() {
+        let dir = tempdir().unwrap();
+        let user = dir.path().join("user");
+        atomic_write(
+            &user.join("patches/auto/v2/mpv.conf.patch"),
+            b"schema=2\ntarget=mpv.conf\n@append\n|# keep me\n@end\n",
+        )
+        .unwrap();
+
+        merge_auto_patches(&user, &BTreeMap::new()).unwrap();
+
+        let text = fs::read_to_string(user.join("patches/auto/v2/mpv.conf.patch")).unwrap();
+        assert!(text.contains("# keep me"), "{text}");
+    }
+
+    #[test]
+    fn comments_are_representable_as_line_operations() {
+        let current = doc("# my note\nosc=yes\nvolume=70\n");
+        let baseline = doc("# official note\nosc=yes\nvolume=100\n");
+        let captured = crate::config::capture_patch(&current, &baseline).unwrap();
+        assert_eq!(captured.keys.len(), 1);
+        assert_eq!(captured.lines.len(), 1);
+        crate::config::verify_capture(&current, &baseline, &captured).unwrap();
     }
 
     #[test]

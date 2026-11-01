@@ -28,7 +28,7 @@ from .common import (
     write_json,
 )
 from .extract import DEFAULT_REMOVED_HOOKS, extract_component, hook_is_removed
-from .helper import default_output, helper_filename, helper_version
+from .helper import MIN_HELPER_VERSION, default_output, helper_filename, helper_version
 from .inputs import compute_inputs_hash
 from .patch_uosc import patch_uosc
 from .userstate import write_inventory, write_package_state
@@ -279,7 +279,7 @@ def write_metadata(
 
     updater = {
         "protocol": 1,
-        "min_helper_version": helper_version(),
+        "min_helper_version": MIN_HELPER_VERSION,
         "patch_schema": 1,
         "user_layer": "portable_config/user",
         "state_dir": "portable_config/.playkit",

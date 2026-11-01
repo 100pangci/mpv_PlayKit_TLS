@@ -21,7 +21,7 @@ from .common import (
     sha256_file,
     write_json,
 )
-from .helper import helper_version
+from .helper import MIN_HELPER_VERSION
 from .upstream import lock_hash
 
 # Files that are generated next to the published assets but are not themselves
@@ -200,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
         "platforms": platforms,
         "updater": {
             "protocol": 1,
-            "min_helper_version": helper_version(),
+            "min_helper_version": MIN_HELPER_VERSION,
             "patch_schema": 1,
             "user_layer": "portable_config/user",
             "state_dir": "portable_config/.playkit",

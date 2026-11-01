@@ -42,7 +42,8 @@ Release、不启动 helper。`install_enabled=no` 可以只关闭安装，保留
    记录的官方基线。
 7. 等待当前 mpv 退出（`--wait-pid`，默认最多 600 秒）。
 8. 在 current 的同级 staging 目录组装新安装：复制新包、保留运行时状态、
-   迁移 `user/` 子层、应用手动和自动 patch、复制用户脚本/字体/script-opts。
+   迁移 `user/` 子层、合并自动 patch、应用 schema 1/2 手动与自动 patch、
+   复制用户脚本/字体/script-opts。
 9. 再次确认 staging 完整后，用重命名完成交换：
    `current → current.previous`，`staging → current`。
    任一步失败会尝试恢复原目录。
@@ -71,7 +72,7 @@ Release、不启动 helper。`install_enabled=no` 可以只关闭安装，保留
 
 | 路径 | 内容 |
 | --- | --- |
-| `state.json` | 当前版本、平台、官方与生成文件的 SHA-256、已应用的 patch |
+| `state.json` | 当前版本、平台、官方与生成文件的 SHA-256、已应用的 patch、用户层指纹 |
 | `official/` | 本版本官方配置的只读基线 |
 | `generated/` | 应用用户 patch 后最后一次写入磁盘的配置快照 |
 | `update-status.json` | helper 写入的进度/结果（`schema`、`state`、`message`） |
@@ -79,7 +80,8 @@ Release、不启动 helper。`install_enabled=no` 可以只关闭安装，保留
 
 `portable_config/user/` 永远不被更新器整体删除。更新时保留并重建：
 
-- `user/patches/`（手动 patch 与 `auto/` 捕获的 patch）
+- `user/patches/`（schema 1 手动 patch、`v2/` 手动 patch、`auto/` 与
+  `auto/v2/` 捕获的 patch）
 - `user/scripts/`（用户 Lua，复制到 `scripts/`）
 - `user/fonts/`（复制到 `fonts/`）
 - `user/script-opts/`（用户覆盖项，复制到 `script-opts/`）
@@ -90,6 +92,21 @@ Release、不启动 helper。`install_enabled=no` 可以只关闭安装，保留
 其余 `_cache/` 缓存丢弃。包内 `user/README.md` 等空目录占位文件不会被复制进
 用户层覆盖用户已有文件。
 
+## 启动自动修复
+
+`update-check.lua` 在启动约 6 秒后调用 `repair-auto`（`repair --if-needed` 的
+内部别名）。helper 计算
+`user/patches/`、`user/scripts/`、`user/fonts/`、`user/script-opts/` 的指纹，
+并与 `state.json` 中的 `user_fingerprint` 比较。没有变化时只读取状态和文件
+元数据，不获取更新锁、不重写配置；有变化时才重新应用 patch。
+
+修复后如果生成配置或用户资源发生变化，且 `auto_repair_relaunch=auto`（默认）时
+启动阶段还没有加载媒体，Lua 会启动一个脱离的 `relaunch` worker，然后退出
+当前播放器；worker 等待 PID 结束后启动新播放器，新进程读取的已经是新配置。
+如果已经加载媒体，或者设置为 `no`，则只显示“重启播放器后生效”，不会中断
+当前播放。`auto_repair=no` 完全关闭这条路径；`enabled=no` 时脚本在启动任何
+子进程之前返回。
+
 ## 命令行
 
 ```text
@@ -98,7 +115,9 @@ playkit-updater install  --root <安装目录> --repository <owner/repo> --tag <
                           [--unmanaged capture|discard|abort]
                           [--relaunch auto|yes|no] [--detach] [--quiet]
 playkit-updater capture  --root <安装目录> [--dry-run] [--quiet]
-playkit-updater repair   --root <安装目录> [--assume-official] [--quiet]
+playkit-updater repair   --root <安装目录> [--assume-official] [--if-needed] [--quiet]
+playkit-updater relaunch --root <安装目录> [--wait-pid <pid>]
+                          [--wait-timeout <秒>] [--detach] [--quiet]
 playkit-updater rollback --root <安装目录> [--wait-pid <pid>]
                           [--relaunch auto|yes|no] [--detach] [--quiet]
 playkit-updater verify   --root <安装目录>
@@ -108,16 +127,37 @@ playkit-updater --version
 
 - `install`：完整更新。`--source-dir` 只在 debug 构建中可用，用于本地测试；
   正式构建拒绝它，只允许从 GitHub HTTPS 下载。
-- `capture`：把当前配置与上次生成快照的差异写成 `user/patches/auto/` 下的
-  patch，并更新 `generated/` 哈希。不联网。
-- `repair`：安装器复制完文件后重建 official/generated 状态并重新应用用户层，
-  使新目录与自动更新后的结果一致。
+- `capture`：把当前配置与上次生成快照的差异写成 `user/patches/auto/v2/` 下的
+  patch，并更新 `generated/` 哈希和用户层指纹。不联网。旧的 schema 1 自动
+  patch 会合并进 schema 2 文件后删除。更新 generated 哈希可以避免下一次
+  repair 把刚刚捕获的编辑误判为未托管修改。
+- `repair`：重建 official/generated 状态并重新应用用户层。正常更新会自动
+  执行；菜单中的“立即重新应用配置 patch”用于不等待下一次更新就强制重放
+  patch，写出的配置在下次启动时生效。
+  `--if-needed` 先比较 `state.json` 中的用户层指纹（patch、用户脚本、字体、
+  script-opts）以及版本、平台和快照是否存在；一致时直接退出，不重写配置。
+  `update-check.lua` 每次启动都会调用这个模式，因此改完 patch 后重启即可
+  自动生效。
+- `relaunch`：等待指定 PID 退出后启动安装目录中的播放器。Lua 在自动修复
+  改变配置且当前未加载媒体时用它完成一次自动重启；`--detach` 让 worker 脱离
+  播放器进程，避免播放器退出时被一起结束。
 - `rollback`：把 `.previous` 换回 current；没有 previous 时明确失败。
 - `verify`：只检查本地状态和配置哈希，不修改文件。
 - `status`：输出 `update-status.json` 的 JSON，供脚本或人工排查。
 
 `--detach` 由 Lua 使用：helper 再复制自身到系统临时目录并启动真正的 worker，
 初始进程立即返回，避免播放器退出时把 helper 一起结束。
+
+`repair --if-needed` 用退出码向 Lua 报告结果：
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 已重新应用，且生成配置或用户资源发生变化；重启后会加载新内容 |
+| `3` | 用户层指纹一致，无需修复 |
+| `4` | 已执行修复，但生成配置与修复前完全相同（例如首次建立指纹） |
+
+其他非零退出码表示失败，Lua 只显示简短 OSD 并指向 `updater.log`。不带
+`--if-needed` 的 `repair` 始终返回 `0`（成功）。
 
 ## 用户未托管修改
 
@@ -126,13 +166,34 @@ playkit-updater --version
 
 | 策略 | 行为 |
 | --- | --- |
-| `capture`（默认） | 把差异转成 `user/patches/auto/<target>.patch`，然后继续更新 |
+| `capture`（默认） | 把差异转成 `user/patches/auto/v2/<target>.patch`，然后继续更新 |
 | `discard` | 丢弃差异（会记录警告），继续更新 |
 | `abort` | 视为严重冲突，停止更新，current 不变 |
 
-无法用 patch 语义表达的行（例如 input.conf 中无法识别的命令形式）也会中止
-更新，而不是静默丢失。手动 patch 永远优先于自动 patch，并且在清理
+键/值差异写成键操作，注释、菜单项和原始文本写成 schema 2 行操作；同一处连续
+修改同时包含配置键和注释时会中止捕获，要求写成手动 patch。捕获结果会在内存中
+重放校验，失败则中止更新。自动 patch 会与旧自动 patch 合并，同一个键以最后
+一次捕获为准，行操作按顺序保留。手动 patch 永远优先于自动 patch，并且在清理
 `auto/` 后仍会保留。
+
+## schema 1/2 兼容
+
+schema 2 增加行操作，但 helper 1.0.0 只认识 schema 1。为了让旧安装能先升级到
+包含新 helper 的版本，这一版 Release 仍然声明：
+
+```json
+"updater": {
+  "protocol": 1,
+  "min_helper_version": "1.0.0",
+  "patch_schema": 1
+}
+```
+
+新 helper 自身版本是 1.1.0，同时接受 manifest 的 `patch_schema` 1 或 2。旧
+helper 会忽略 `user/patches/v2/` 和 `user/patches/auto/v2/`，只按 schema 1
+完成这次安装；新版本启动后，`update-check.lua` 检测到版本变化并调用一次
+`repair`，把旧自动 patch 合并为 schema 2，再重新应用。之后用户可以直接在
+`v2/` 中写行操作。
 
 ## 失败与恢复
 

@@ -9,7 +9,10 @@ use crate::util::{
 };
 
 pub const SUPPORTED_UPDATER_PROTOCOL: u32 = 1;
-pub const SUPPORTED_PATCH_SCHEMA: u32 = 1;
+/// Newest patch schema this helper understands.  Schema 1 remains accepted so
+/// an existing installation can upgrade through a bridge release.
+pub const SUPPORTED_PATCH_SCHEMA: u32 = 2;
+pub const MIN_PATCH_SCHEMA: u32 = 1;
 pub const MAX_ARCHIVE_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MAX_METADATA_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -118,7 +121,7 @@ impl ReleaseManifest {
                 }
             }
             if let Some(patch_schema) = updater.patch_schema {
-                if patch_schema != SUPPORTED_PATCH_SCHEMA {
+                if !(MIN_PATCH_SCHEMA..=SUPPORTED_PATCH_SCHEMA).contains(&patch_schema) {
                     return Err(Failure::blocked(
                         "此更新使用不兼容的用户 patch 格式。",
                         format!("patch schema {patch_schema}"),

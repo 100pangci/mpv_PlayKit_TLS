@@ -105,6 +105,18 @@ impl Drop for InstallLock {
 }
 
 pub fn acquire_lock(layout: &Layout) -> Result<InstallLock> {
+    try_acquire_lock(layout)?.ok_or_else(|| {
+        Failure::blocked(
+            "另一个更新正在进行，请稍后重试。",
+            format!("{}: lock is held", layout.lock_path().display()),
+        )
+    })
+}
+
+/// Non-blocking variant used by automatic startup repair: if another helper
+/// owns the lock, the operation is simply skipped instead of reporting an
+/// error to the player.
+pub fn try_acquire_lock(layout: &Layout) -> Result<Option<InstallLock>> {
     let path = layout.lock_path();
     let mut file = OpenOptions::new()
         .create(true)
@@ -118,15 +130,36 @@ pub fn acquire_lock(layout: &Layout) -> Result<InstallLock> {
                 format!("{}: {error}", path.display()),
             )
         })?;
-    file.try_lock_exclusive().map_err(|error| {
-        Failure::blocked(
-            "另一个更新正在进行，请稍后重试。",
-            format!("{}: {error}", path.display()),
-        )
-    })?;
+    match file.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(error) if lock_is_contended(&error) => return Ok(None),
+        Err(error) => {
+            return Err(Failure::blocked(
+                "另一个更新正在进行，请稍后重试。",
+                format!("{}: {error}", path.display()),
+            ))
+        }
+    }
     let _ = file.set_len(0);
     let _ = writeln!(file, "{}", std::process::id());
-    Ok(InstallLock { _file: file, path })
+    Ok(Some(InstallLock { _file: file, path }))
+}
+
+fn lock_is_contended(error: &std::io::Error) -> bool {
+    if error.kind() == std::io::ErrorKind::WouldBlock {
+        return true;
+    }
+    // fs2 surfaces LockFileEx's ERROR_LOCK_VIOLATION as a raw Windows error
+    // instead of WouldBlock.  ERROR_SHARING_VIOLATION is treated the same way:
+    // another process is using the lock file.
+    #[cfg(windows)]
+    {
+        matches!(error.raw_os_error(), Some(32) | Some(33))
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
 }
 
 pub fn prepare_staging(layout: &Layout) -> Result<PathBuf> {
@@ -564,6 +597,7 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         let layout = Layout::new(&root).unwrap();
         let first = acquire_lock(&layout).unwrap();
+        assert!(try_acquire_lock(&layout).unwrap().is_none());
         let error = acquire_lock(&layout).unwrap_err();
         assert_eq!(error.kind, crate::util::ErrorKind::Blocked);
         drop(first);

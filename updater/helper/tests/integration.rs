@@ -445,7 +445,7 @@ fn full_install_captures_edits_preserves_user_layer_and_rolls_back() {
     assert!(mpv_conf.contains("new-option=yes"), "{mpv_conf}");
     assert!(!mpv_conf.contains("volume=100"), "{mpv_conf}");
     assert!(root
-        .join("portable_config/user/patches/auto/mpv.conf.patch")
+        .join("portable_config/user/patches/auto/v2/mpv.conf.patch")
         .is_file());
     assert!(root.join("portable_config/scripts/mine.lua").is_file());
     assert!(root
@@ -642,6 +642,186 @@ fn manual_patches_are_preserved_and_applied_to_the_new_official_config() {
 }
 
 #[test]
+fn schema_two_manual_patch_inserts_a_uosc_menu_item() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("playkit");
+    fs::create_dir(&root).unwrap();
+    setup_old_install(&root);
+    write_file(
+        root.join("portable_config/user/patches/v2/input.conf.patch"),
+        "schema=2\ntarget=input.conf\n\n@after menu:播放 > 暂停\n|# script-binding my-ui/refresh #! 工具 > 刷新订阅\n@end\n",
+    );
+    let release = make_release(&dir.path().join("release"), NEW_VERSION);
+
+    install(&install_options(&root, &release, UnmanagedPolicy::Capture)).unwrap();
+    let input = fs::read_to_string(root.join("portable_config/input.conf")).unwrap();
+    assert_eq!(
+        input,
+        "MBTN_LEFT cycle pause #! 播放 > 暂停\n# script-binding my-ui/refresh #! 工具 > 刷新订阅\n"
+    );
+    // Repair must be idempotent: the menu item is not inserted twice.
+    playkit_updater::update::repair(&playkit_updater::update::RepairOptions {
+        root: root.clone(),
+        assume_official: false,
+        if_needed: false,
+        report_status: false,
+        quiet: true,
+    })
+    .unwrap();
+    let input = fs::read_to_string(root.join("portable_config/input.conf")).unwrap();
+    assert_eq!(input.matches("工具 > 刷新订阅").count(), 1, "{input}");
+}
+
+#[test]
+fn repair_if_needed_tracks_patch_changes_and_skips_an_unchanged_layer() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("playkit");
+    fs::create_dir(&root).unwrap();
+    setup_old_install(&root);
+    let patch = root.join("portable_config/user/patches/v2/mpv.conf.patch");
+    write_file(&patch, "schema=2\ntarget=mpv.conf\n\n[global]\nvolume=55\n");
+
+    let options = |if_needed: bool| playkit_updater::update::RepairOptions {
+        root: root.clone(),
+        assume_official: false,
+        if_needed,
+        report_status: false,
+        quiet: true,
+    };
+
+    let first = playkit_updater::update::repair(&options(false)).unwrap();
+    assert!(first.repaired);
+    assert!(first.changed);
+    let mpv_conf = fs::read_to_string(root.join("portable_config/mpv.conf")).unwrap();
+    assert!(mpv_conf.contains("volume=55"), "{mpv_conf}");
+
+    let unchanged = playkit_updater::update::repair(&options(true)).unwrap();
+    assert!(!unchanged.repaired);
+    assert!(!unchanged.changed);
+
+    write_file(&patch, "schema=2\ntarget=mpv.conf\n\n[global]\nvolume=56\n");
+    let changed = playkit_updater::update::repair(&options(true)).unwrap();
+    assert!(changed.repaired);
+    assert!(changed.changed);
+    let mpv_conf = fs::read_to_string(root.join("portable_config/mpv.conf")).unwrap();
+    assert!(mpv_conf.contains("volume=56"), "{mpv_conf}");
+
+    let unchanged_again = playkit_updater::update::repair(&options(true)).unwrap();
+    assert!(!unchanged_again.repaired);
+
+    fs::remove_file(&patch).unwrap();
+    let removed = playkit_updater::update::repair(&options(true)).unwrap();
+    assert!(removed.repaired);
+    assert!(removed.changed);
+    let mpv_conf = fs::read_to_string(root.join("portable_config/mpv.conf")).unwrap();
+    assert!(!mpv_conf.contains("volume=56"), "{mpv_conf}");
+    assert!(mpv_conf.contains("volume=100"), "{mpv_conf}");
+}
+
+#[test]
+fn capture_refreshes_the_generated_snapshot_for_if_needed_repair() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("playkit");
+    fs::create_dir(&root).unwrap();
+    setup_old_install(&root);
+    write_file(
+        root.join("portable_config/mpv.conf"),
+        "volume=55\nosc=yes\n",
+    );
+
+    capture(&CaptureOptions {
+        root: root.clone(),
+        dry_run: false,
+        quiet: true,
+    })
+    .unwrap();
+
+    let state: Value = serde_json::from_str(
+        &fs::read_to_string(root.join("portable_config/.playkit/state.json")).unwrap(),
+    )
+    .unwrap();
+    let generated = state["generated"]["mpv.conf"].as_str().unwrap();
+    assert_eq!(
+        generated,
+        sha256_file(&root.join("portable_config/mpv.conf")).unwrap()
+    );
+    assert!(state["user_fingerprint"].as_str().is_some());
+
+    let skipped = playkit_updater::update::repair(&playkit_updater::update::RepairOptions {
+        root: root.clone(),
+        assume_official: false,
+        if_needed: true,
+        report_status: false,
+        quiet: true,
+    })
+    .unwrap();
+    assert!(!skipped.repaired);
+
+    // A forced repair must not mistake the just-captured edit for an
+    // unmanaged modification.
+    let repaired = playkit_updater::update::repair(&playkit_updater::update::RepairOptions {
+        root,
+        assume_official: false,
+        if_needed: false,
+        report_status: false,
+        quiet: true,
+    })
+    .unwrap();
+    assert!(repaired.repaired);
+}
+
+#[test]
+fn first_repair_of_a_fresh_package_does_not_count_placeholders_as_changes() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("playkit");
+    fs::create_dir(&root).unwrap();
+    setup_old_install(&root);
+
+    let report = playkit_updater::update::repair(&playkit_updater::update::RepairOptions {
+        root,
+        assume_official: false,
+        if_needed: true,
+        report_status: false,
+        quiet: true,
+    })
+    .unwrap();
+    assert!(report.repaired);
+    assert!(!report.changed);
+}
+
+#[test]
+fn repair_refreshes_edited_user_assets_recorded_in_state() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("playkit");
+    fs::create_dir(&root).unwrap();
+    setup_old_install(&root);
+
+    let state_path = root.join("portable_config/.playkit/state.json");
+    let mut state: Value = serde_json::from_str(&fs::read_to_string(&state_path).unwrap()).unwrap();
+    state["user_scripts"] = json!(["mine.lua"]);
+    write_json(&state_path, &state);
+    write_file(
+        root.join("portable_config/user/scripts/mine.lua"),
+        "-- updated user script\n",
+    );
+
+    let report = playkit_updater::update::repair(&playkit_updater::update::RepairOptions {
+        root: root.clone(),
+        assume_official: false,
+        if_needed: true,
+        report_status: false,
+        quiet: true,
+    })
+    .unwrap();
+    assert!(report.repaired);
+    assert!(report.changed);
+    assert_eq!(
+        fs::read_to_string(root.join("portable_config/scripts/mine.lua")).unwrap(),
+        "-- updated user script\n"
+    );
+}
+
+#[test]
 fn user_script_opts_are_copied_but_a_same_name_official_file_blocks_the_update() {
     let dir = tempdir().unwrap();
     let root = dir.path().join("playkit");
@@ -665,7 +845,7 @@ fn user_script_opts_are_copied_but_a_same_name_official_file_blocks_the_update()
     setup_old_install(&root);
     write_file(
         root.join("portable_config/user/script-opts/update-check.conf"),
-        "enabled=no\n",
+        "enabled=yes\n",
     );
     let release = make_release(&dir.path().join("release"), NEW_VERSION);
     let error = install(&install_options(&root, &release, UnmanagedPolicy::Capture)).unwrap_err();
@@ -693,7 +873,9 @@ fn capture_command_writes_auto_patches_without_swapping() {
     assert_eq!(report.targets.get("mpv.conf"), Some(&1));
     assert_eq!(read_version(&root), OLD_VERSION);
     let patch =
-        fs::read_to_string(root.join("portable_config/user/patches/auto/mpv.conf.patch")).unwrap();
+        fs::read_to_string(root.join("portable_config/user/patches/auto/v2/mpv.conf.patch"))
+            .unwrap();
+    assert!(patch.contains("schema=2"), "{patch}");
     assert!(patch.contains("volume=55"), "{patch}");
     let status = read_status_file(&root).unwrap().unwrap();
     assert_eq!(status.state, "captured");

@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::update::{
-    self, CaptureOptions, InstallOptions, RelaunchPolicy, RepairOptions, RollbackOptions,
-    UnmanagedPolicy,
+    self, CaptureOptions, InstallOptions, RelaunchOptions, RelaunchPolicy, RepairOptions,
+    RollbackOptions, UnmanagedPolicy,
 };
 use crate::util::{Failure, Result};
 
@@ -18,7 +18,9 @@ playkit-updater {version}
                             [--wait-pid <pid>] [--unmanaged capture|discard|abort]
                             [--relaunch auto|yes|no] [--detach] [--quiet]
   playkit-updater capture  --root <安装目录> [--dry-run] [--quiet]
-  playkit-updater repair   --root <安装目录> [--assume-official] [--quiet]
+  playkit-updater repair   --root <安装目录> [--assume-official] [--if-needed] [--quiet]
+  playkit-updater relaunch --root <安装目录> [--wait-pid <pid>] [--wait-timeout <秒>]
+                            [--detach] [--quiet]
   playkit-updater rollback --root <安装目录> [--wait-pid <pid>]
                             [--relaunch auto|yes|no] [--detach] [--quiet]
   playkit-updater verify   --root <安装目录>
@@ -53,7 +55,13 @@ pub fn run(args: Vec<OsString>) -> Result<i32> {
         }
         "install" => install(&args[1..]),
         "capture" => capture(&args[1..]),
-        "repair" => repair(&args[1..]),
+        "repair" => repair(&args[1..], false),
+        // Internal alias used by update-check.lua.  A helper older than the
+        // fingerprint feature rejects this command with a usage error, which
+        // lets the Lua script skip automatic repair instead of repeatedly
+        // running a full repair and restarting the player.
+        "repair-auto" => repair(&args[1..], true),
+        "relaunch" => relaunch(&args[1..]),
         "rollback" => rollback(&args[1..]),
         "verify" => verify(&args[1..]),
         "status" => status(&args[1..]),
@@ -131,13 +139,56 @@ fn capture(args: &[String]) -> Result<i32> {
     Ok(0)
 }
 
-fn repair(args: &[String]) -> Result<i32> {
+fn repair(args: &[String], force_if_needed: bool) -> Result<i32> {
     let root = required_path(args, "--root")?;
     let assume_official = has_flag(args, "--assume-official");
+    let if_needed = force_if_needed || has_flag(args, "--if-needed");
     let quiet = has_flag(args, "--quiet");
-    update::repair(&RepairOptions {
+    let report = update::repair(&RepairOptions {
         root,
         assume_official,
+        if_needed,
+        report_status: !force_if_needed,
+        quiet,
+    })?;
+    if !quiet {
+        if report.repaired {
+            println!("配置 patch 已重新应用。");
+        } else {
+            println!("配置 patch 无需重新应用。");
+        }
+    }
+    if !if_needed {
+        return Ok(0);
+    }
+    // update-check.lua distinguishes these results without parsing output:
+    // 0 = configuration changed and a restart will load it, 3 = nothing to do,
+    // 4 = repair ran but produced identical generated files.
+    Ok(if !report.repaired {
+        3
+    } else if report.changed {
+        0
+    } else {
+        4
+    })
+}
+
+fn relaunch(args: &[String]) -> Result<i32> {
+    let root = required_path(args, "--root")?;
+    let wait_pid = optional_u32(args, "--wait-pid")?.unwrap_or(0);
+    let wait_timeout = Duration::from_secs(
+        optional_u32(args, "--wait-timeout")?
+            .unwrap_or(600)
+            .clamp(1, 3600) as u64,
+    );
+    let quiet = has_flag(args, "--quiet");
+    if has_flag(args, "--detach") {
+        return detach_worker("relaunch", args);
+    }
+    update::relaunch_player(&RelaunchOptions {
+        root,
+        wait_pid,
+        wait_timeout,
         quiet,
     })?;
     Ok(0)

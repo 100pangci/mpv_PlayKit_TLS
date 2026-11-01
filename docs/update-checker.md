@@ -28,6 +28,8 @@ check_interval_hours=24
 timeout_seconds=12
 snooze_hours=24
 install_enabled=yes
+auto_repair=yes
+auto_repair_relaunch=auto
 unmanaged=capture
 relaunch=auto
 wait_timeout=600
@@ -41,6 +43,8 @@ wait_timeout=600
 | `timeout_seconds` | `12` | curl/wget 超时 |
 | `snooze_hours` | `24` | “稍后提醒”的默认时长 |
 | `install_enabled` | `yes` | `no` 时隐藏/拒绝播放器内安装，但仍可检查 |
+| `auto_repair` | `yes` | 启动时检测用户层变化并重新应用 patch；`no` 关闭 |
+| `auto_repair_relaunch` | `auto` | 自动修复改变配置后重启：`auto`（仅在未加载媒体时）、`yes` 或 `no` |
 | `unmanaged` | `capture` | 直接编辑生成配置时的处理：`capture`、`discard` 或 `abort` |
 | `relaunch` | `auto` | 更新后重启：`auto`、`yes` 或 `no` |
 | `wait_timeout` | `600` | 等待 mpv 退出的最长秒数（1–3600） |
@@ -69,8 +73,26 @@ wait_timeout=600
 检查的：检查仍可进行，但不会下载或替换任何文件。`build/verify.py` 会静态检查
 门禁字符串出现在 `name = "subprocess"` 之前。
 
-检查本身不强制后台安装：只有自动检查是定时的，安装、捕获和回滚都必须由用户
-在菜单中选择。
+检查本身不强制后台安装：只有自动检查和用户层自动修复是定时的，安装、捕获和
+回滚都必须由用户在菜单中选择。
+
+## 启动时自动修复用户层
+
+`auto_repair=yes` 时，脚本在启动 6 秒后调用：
+
+```text
+updater/playkit-updater repair-auto --root <安装目录> --quiet
+```
+
+`repair-auto` 是 `repair --if-needed` 的内部别名；旧 helper 不认识这个命令，
+会返回 usage 错误（退出码 64），脚本据此静默跳过，避免反复全量 repair。
+helper 比较 patch、用户脚本、字体和 script-opts 的指纹与 `state.json`；
+没有变化时退出码为 3，不重写配置。有变化时重新应用 patch，并通过退出码
+0（配置或用户资源变化）或 4（没有变化）报告结果。退出码 0 且启动时没有加载媒体时，
+`auto_repair_relaunch=auto` 会启动 `relaunch --detach` worker，等待当前 mpv
+退出后再启动一次，让新配置在本次启动生效。已经加载媒体时不会自动退出，只
+提示手动重启。`auto_repair=no`、`install_enabled=no`、`state.disabled=true`
+都会关闭这条路径；`enabled=no` 在脚本开头直接返回，不会启动 helper。
 
 ## 状态文件
 
@@ -85,7 +107,8 @@ wait_timeout=600
   "latest_url": "",
   "snoozed_until": 0,
   "dismissed_version": "",
-  "disabled": false
+  "disabled": false,
+  "last_repaired_version": ""
 }
 ```
 
@@ -104,6 +127,7 @@ wait_timeout=600
 | 立即检查 | `Ctrl+u` |
 | 下载并安装更新 | uosc 菜单“更新 > 下载并安装更新” |
 | 保存当前配置修改 | uosc 菜单“更新 > 保存当前配置修改” |
+| 立即重新应用配置 patch | uosc 菜单“更新 > 立即重新应用配置 patch” |
 | 回滚到上一版本 | uosc 菜单“更新 > 回滚到上一版本” |
 | 打开 Release 页面 | uosc 菜单“更新 > 打开 Release 页面” |
 | 稍后提醒 | uosc 菜单“更新 > 稍后提醒” |
@@ -134,7 +158,7 @@ wait_timeout=600
 
 `state` 的取值包括 `starting`、`downloading`、`verifying`、`ready`、`waiting`、
 `staging`、`installing`、`installed`、`capturing`、`captured`、`repairing`、
-`repaired`、`rolling-back`、`rolled-back`、`blocked`、`failed`。
+`up-to-date`、`repaired`、`rolling-back`、`rolled-back`、`blocked`、`failed`。
 
 ## 仓库可见性
 

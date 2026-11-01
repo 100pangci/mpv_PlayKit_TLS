@@ -1498,9 +1498,10 @@ class WorkflowTests(unittest.TestCase):
                 verify_package_state(stage, "2026.11", "windows-x64")
 
     def test_updater_version_matches_crate(self) -> None:
-        from build.helper import helper_version
+        from build.helper import MIN_HELPER_VERSION, helper_version
 
-        self.assertEqual(helper_version(), "1.0.0")
+        self.assertEqual(helper_version(), "1.1.0")
+        self.assertEqual(MIN_HELPER_VERSION, "1.0.0")
 
     def test_install_binding_requires_the_enabled_gate(self) -> None:
         text = (ROOT / "updater" / "update-check.lua").read_text(encoding="utf-8")
@@ -1508,8 +1509,9 @@ class WorkflowTests(unittest.TestCase):
         install = text.find("local function install_now")
         capture = text.find("local function capture_now")
         rollback = text.find("local function rollback_now")
+        repair = text.find("local function repair_now")
         end = text.find("mp.add_key_binding(nil, \"check-now\"")
-        self.assertTrue(0 < start < install < capture < rollback < end)
+        self.assertTrue(0 < start < install < capture < rollback < repair < end)
         gate = text[start:install]
         self.assertIn("truthy_disabled(opts.install_enabled)", gate)
         self.assertIn("state.disabled", gate)
@@ -1517,20 +1519,38 @@ class WorkflowTests(unittest.TestCase):
         for name, begin, finish in (
             ("install", install, capture),
             ("capture", capture, rollback),
-            ("rollback", rollback, end),
+            ("rollback", rollback, repair),
+            ("repair", repair, end),
         ):
             body = text[begin:finish]
             self.assertIn("updater_available()", body, name)
         self.assertIn('"--wait-pid"', text[install:capture])
         self.assertIn('"--detach"', text[install:capture])
-        self.assertIn('"--wait-pid"', text[rollback:end])
-        self.assertIn('"--detach"', text[rollback:end])
-        for name in ("install-now", "capture-now", "rollback"):
+        self.assertIn('"--wait-pid"', text[rollback:repair])
+        self.assertIn('"--detach"', text[rollback:repair])
+        for name in ("install-now", "capture-now", "rollback", "repair-now"):
             self.assertIn(f"mp.add_key_binding(nil, \"{name}\"", text)
             self.assertIn(
                 f"script-binding update-check/{name}",
                 (ROOT / "config" / "common" / "input.conf").read_text(encoding="utf-8"),
             )
+
+    def test_auto_repair_is_gated_by_the_enabled_switch(self) -> None:
+        text = (ROOT / "updater" / "update-check.lua").read_text(encoding="utf-8")
+        gate = text.find("truthy_disabled(opts.enabled)")
+        auto_repair = text.find("local function auto_repair_allowed")
+        self.assertNotEqual(gate, -1)
+        self.assertNotEqual(auto_repair, -1)
+        self.assertLess(gate, auto_repair)
+        self.assertIn("truthy_disabled(opts.auto_repair)", text)
+        self.assertIn('"repair-auto"', text)
+        self.assertIn("auto_repair_relaunch", text)
+        self.assertIn("last_repaired_version = \"\"", text)
+        config = (
+            ROOT / "config" / "common" / "script-opts" / "update-check.conf"
+        ).read_text(encoding="utf-8")
+        self.assertIn("auto_repair=yes", config)
+        self.assertIn("auto_repair_relaunch=auto", config)
 
     def test_commit_lock_installs_python_dependencies(self) -> None:
         steps = self._workflow("monthly-update.yml")["jobs"]["commit-lock"]["steps"]
