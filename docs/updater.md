@@ -107,6 +107,11 @@ Release、不启动 helper。`install_enabled=no` 可以只关闭安装，保留
 当前播放。`auto_repair=no` 完全关闭这条路径；`enabled=no` 时脚本在启动任何
 子进程之前返回。
 
+`playkit_version` 不必是发布版本号。CI 或本地构建使用 `ci`、`0.0.0-dev` 等
+标签时，`repair`、`capture` 和 `verify` 仍然正常工作；只有 `install` 需要当前
+版本和目标 tag 都是可比较的发布版本，因此开发版不会被自动更新，但用户层
+patch 仍会在启动时自动修复。
+
 ## 命令行
 
 ```text

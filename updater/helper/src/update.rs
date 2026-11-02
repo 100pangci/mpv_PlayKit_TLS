@@ -481,7 +481,7 @@ fn read_install_version(root: &Path, platform: &str) -> Result<String> {
             format!("{} says {}", path.display(), info.platform),
         ));
     }
-    if crate::util::version_parts(&info.version).is_none() {
+    if !crate::util::is_safe_version_label(&info.version) {
         return Err(Failure::blocked(
             "当前安装的版本号无效。",
             format!("{}: {:?}", path.display(), info.version),
@@ -1787,6 +1787,84 @@ mod tests {
 
     fn doc(text: &str) -> ConfigDoc {
         ConfigDoc::parse(text, ConfigKind::Mpv).unwrap()
+    }
+
+    fn test_platform() -> &'static str {
+        if cfg!(windows) {
+            "windows-x64"
+        } else {
+            "linux-x64"
+        }
+    }
+
+    fn write_version_file(root: &Path, version: &str) {
+        fs::create_dir_all(root).unwrap();
+        let data = serde_json::json!({
+            "schema": 1,
+            "playkit_version": version,
+            "platform": test_platform(),
+        });
+        fs::write(
+            root.join("playkit-version.json"),
+            serde_json::to_vec(&data).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn read_install_version_accepts_development_labels() {
+        let dir = tempdir().unwrap();
+        for version in ["ci", "0.0.0-dev", "2026.11"] {
+            write_version_file(dir.path(), version);
+            assert_eq!(
+                read_install_version(dir.path(), test_platform()).unwrap(),
+                version
+            );
+        }
+    }
+
+    #[test]
+    fn read_install_version_rejects_unsafe_labels() {
+        let dir = tempdir().unwrap();
+        for version in ["", "..", "../evil", "a/b", "a\\b"] {
+            write_version_file(dir.path(), version);
+            assert!(
+                read_install_version(dir.path(), test_platform()).is_err(),
+                "{version:?} should be rejected"
+            );
+        }
+    }
+
+    /// CI packages are stamped with a non-release version such as `ci`.  The
+    /// startup auto repair must still work on them; only installs need
+    /// comparable release versions.
+    #[test]
+    fn repair_supports_a_development_install() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("mpv-PlayKit-ci");
+        fs::create_dir_all(root.join("portable_config")).unwrap();
+        let marker = if cfg!(windows) {
+            "mpv.exe"
+        } else {
+            "mpv-playkit"
+        };
+        fs::write(root.join(marker), b"").unwrap();
+        write_version_file(&root, "ci");
+        let options = RepairOptions {
+            root: root.clone(),
+            assume_official: false,
+            if_needed: true,
+            report_status: false,
+            quiet: true,
+        };
+
+        let report = repair(&options).unwrap();
+        assert!(report.repaired);
+        let state = State::load(&root.join("portable_config")).unwrap().unwrap();
+        assert_eq!(state.installed_version, "ci");
+
+        let again = repair(&options).unwrap();
+        assert!(!again.repaired);
     }
 
     #[test]

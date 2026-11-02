@@ -477,6 +477,22 @@ pub fn compare_versions(left: &str, right: &str) -> Option<std::cmp::Ordering> {
     Some(std::cmp::Ordering::Equal)
 }
 
+/// Version labels are stored in `state.json`, written to log messages and used
+/// as a component of backup directory names.  Release versions are numeric,
+/// but CI and local builds are stamped with labels such as `ci` or
+/// `0.0.0-dev`.  Those installs still support repair, capture and verify; only
+/// release comparisons require [`version_parts`].  Reject anything that could
+/// escape a path component instead of requiring numeric parts here.
+pub fn is_safe_version_label(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value != "."
+        && value != ".."
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b'+'))
+}
+
 pub fn is_valid_repository(value: &str) -> bool {
     let mut parts = value.split('/');
     let owner = parts.next().unwrap_or("");
@@ -612,6 +628,29 @@ mod tests {
             Some(std::cmp::Ordering::Equal)
         );
         assert_eq!(compare_versions("not-a-version", "2026.11"), None);
+    }
+
+    #[test]
+    fn version_labels_allow_development_builds_but_stay_path_safe() {
+        for value in ["2026.11", "v2026.11", "0.0.0-dev", "ci", "ci-1234"] {
+            assert!(is_safe_version_label(value), "{value:?} should be accepted");
+        }
+        for value in [
+            "",
+            ".",
+            "..",
+            "../evil",
+            "a/b",
+            "a\\b",
+            "版本",
+            "with space",
+        ] {
+            assert!(
+                !is_safe_version_label(value),
+                "{value:?} should be rejected"
+            );
+        }
+        assert!(!is_safe_version_label(&"a".repeat(65)));
     }
 
     #[test]
