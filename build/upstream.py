@@ -86,6 +86,33 @@ def list_releases(repository: str, per_page: int = 100) -> list[dict[str, Any]]:
     return releases
 
 
+def latest_commit(repository: str) -> tuple[str, str]:
+    """Return the default-branch HEAD commit and its committer date.
+
+    The returned commit is a full SHA.  Callers update their manifest pin to
+    this commit; no branch name is ever written into the lock or package.
+    """
+    commits = github_json(f"{API_ROOT}/repos/{repository}/commits?per_page=1")
+    if not isinstance(commits, list) or not commits:
+        fail(f"{repository}: empty commit list")
+    entry = commits[0]
+    commit = entry.get("sha") if isinstance(entry, dict) else None
+    if not isinstance(commit, str) or not FULL_COMMIT.fullmatch(commit):
+        fail(f"{repository}: latest commit response is invalid")
+    committer = ((entry.get("commit") or {}).get("committer") or {})
+    date = str(committer.get("date") or "")[:10]
+    return commit, date
+
+
+def latest_tag_commit(repository: str) -> tuple[str, str]:
+    """Return the newest non-prerelease release tag and its full commit."""
+    release = get_release(repository, "latest")
+    tag = str(release.get("tag_name") or "")
+    if not tag:
+        fail(f"{repository}: latest release has no tag")
+    return resolve_commit(repository, tag), tag
+
+
 def download_asset_bytes(asset: dict[str, Any]) -> bytes:
     """Download a release asset through the API so private repos work."""
     url = asset.get("url")
@@ -124,7 +151,11 @@ def resolve_commit(
 
 
 def raw_url(repository: str, commit: str, path: str) -> str:
-    return f"{RAW_ROOT}/{repository}/{commit}/{path.lstrip('/')}"
+    # Upstream paths such as AiUpscale's "mpv user shaders/" contain spaces.
+    # Percent-encode the path so urllib accepts it while keeping the repository
+    # and commit untouched.
+    encoded = urllib.parse.quote(path.lstrip("/"), safe="/")
+    return f"{RAW_ROOT}/{repository}/{commit}/{encoded}"
 
 
 def download_raw(
@@ -208,6 +239,56 @@ def resolve_license_files(
     return license_files
 
 
+def shader_lock_fields(
+    component: dict[str, Any],
+    license_files: list[dict[str, Any]],
+    embedded: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Carry shader provenance and model licensing into the lock.
+
+    Model weights are not a separate downloadable asset for these shaders: they
+    are embedded in the GLSL/.hook file or in the release asset.  The lock
+    therefore records the model declaration plus a content hash for every file
+    that contains the weights, and resolves the declared model licence to the
+    exact upstream commit and SHA-256 already pinned for that license text.
+    """
+    result: dict[str, Any] = {}
+    for key in ("family", "status", "derived_from"):
+        value = component.get(key)
+        if value:
+            result[key] = value
+    model = component.get("model")
+    if model:
+        locked_model = dict(model)
+        license_path = str(model.get("license_path") or "")
+        match = next(
+            (item for item in license_files if item.get("path") == license_path),
+            None,
+        )
+        if match is None:
+            fail(
+                f"{component['id']}: model license_path {license_path!r} "
+                "was not resolved from license.files"
+            )
+        locked_model["license_file"] = {
+            key: match.get(key)
+            for key in (
+                "path",
+                "license",
+                "repository",
+                "commit",
+                "source_path",
+                "url",
+                "sha256",
+                "size",
+            )
+            if match.get(key) is not None
+        }
+        locked_model["embedded_in"] = embedded
+        result["model"] = locked_model
+    return result
+
+
 def resolve_raw_component(
     component: dict[str, Any],
     *,
@@ -279,6 +360,14 @@ def resolve_raw_component(
             "files": license_files,
             **scoped_license_fields(license_info),
         },
+        **shader_lock_fields(
+            component,
+            license_files,
+            [
+                {"path": item["target"], "sha256": item["sha256"]}
+                for item in files
+            ],
+        ),
     }
     log(f"resolved {identifier}: {version} <- {repository}@{commit} ({len(files)} files)")
     return locked
@@ -391,6 +480,13 @@ def resolve_component(
         payload = github_request(api_url, accept="application/octet-stream", timeout=180)
         locked["sha256"] = sha256_bytes(payload)
         locked["size"] = len(payload)
+    locked.update(
+        shader_lock_fields(
+            component,
+            license_files,
+            [{"path": asset_name, "sha256": locked["sha256"]}],
+        )
+    )
     log(f"resolved {identifier}: {version} <- {repository}@{release_tag} / {asset_name}")
     return locked
 
@@ -439,6 +535,13 @@ def component_summary(lock: dict[str, Any]) -> dict[str, Any]:
             "sha256": component.get("sha256"),
             "license": (component.get("license") or {}).get("spdx"),
         }
+        if component.get("family"):
+            entry["family"] = component["family"]
+        if component.get("status"):
+            entry["license_status"] = component["status"]
+        model = component.get("model")
+        if isinstance(model, dict):
+            entry["model_license"] = model.get("license_spdx")
         if component.get("kind") == "raw-files":
             entry["kind"] = "raw-files"
             entry["files"] = [

@@ -16,17 +16,21 @@ profiles、截图、yt-dlp 在线播放和播放器内更新检测。所有历�
 - uosc（构建时仅对 `main.lua` 应用自动 UI 缩放补丁，其余文件保持上游）与
   LXGW WenKai Mono Lite 字体
 - 播放器配置、profiles、按键菜单与原创本地脚本
-- 构建时从上游下载并校验的 GLSL 着色器：Anime4K Restore/GAN、FSRCNNX、NNEDI3、
-  k7 modernAnime、Adaptive sharpen
+- 构建时从真正上游下载并校验的 GLSL 着色器：Anime4K v4/GAN、ACNet/ARNet、
+  ArtCNN、CuNNy、AiUpscale、NNEDI3/RAVU、CfL、JointBilateral、PixelClipper、
+  AN3223 nlmeans/guided/hdeband、Adaptive sharpen、FSRCNNX（代码与模型/数据
+  许可证分别记录，逐文件见 `docs/shader-license-audit.md`）
 - Rust `umpv` 单实例启动器：多个文件交给同一个 mpv 窗口，Windows/Linux 共用一套源码
 - 纯净/测试/跑分模式启动器（`installer/modes/`），用于隔离配置问题和基准测试
 - 播放器内自动更新：Rust 更新器负责下载、校验、patch 和事务式替换
 - 用户配置 patch 层（`portable_config/user/`），更新时自动重新应用
 - GitHub Actions 每月自动检查、构建与发布
 
-不包含 VapourSynth、AI 超分/补帧、CUDA、TensorRT、DirectML、模型，以及许可证
-不允许再分发的 shader（Ani4Kv2/AniSD 的模型为 CC BY-NC 4.0，QCOM 来源不明）。
-这些文件不会进入仓库或构建产物。
+不包含 VapourSynth、CUDA、TensorRT、DirectML 和不透明模型文件，也不包含许可证
+不允许再分发的 shader（Ani4Kv2/AniSD 的模型为 CC BY-NC 4.0，AnimeJaNai 为
+CC BY-NC-SA 4.0，k7/QCOM/ESPCN/LUT/Shadertoy 等来源或授权不明）。这些文件不会
+进入仓库或构建产物；随包的 AI shader 权重内嵌在 GLSL/.hook 中，并单独记录模型
+来源与许可证。
 
 ## 下载与使用
 

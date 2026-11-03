@@ -13,12 +13,18 @@
 | fzy (Lua) | [swarn/fzy-lua](https://github.com/swarn/fzy-lua) | uosc 菜单模糊匹配 | MIT | `portable_config/scripts/uosc/lib/fzy.lua` |
 | thumbfast FFI 片段 | [po5/thumbfast](https://github.com/po5/thumbfast) | uosc 缩略图 FFI 声明 | MPL-2.0 | `portable_config/scripts/uosc/lib/utils.lua` |
 | LXGW WenKai Mono Lite | [lxgw/LxgwWenKai-Lite](https://github.com/lxgw/LxgwWenKai-Lite) | 中文字幕字体 | OFL-1.1 | `portable_config/fonts/LXGWWenKaiMonoLite-Regular.ttf` |
-| Anime4K Restore | [bloc97/Anime4K](https://github.com/bloc97/Anime4K) | GLSL 重建着色器 | MIT | `portable_config/shaders/Anime4K/Anime4K_Restore_CNN_L.glsl` |
-| Anime4K Upscale GAN | [bloc97/Anime4K](https://github.com/bloc97/Anime4K) | GLSL GAN 放大着色器 | MIT | `portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x2_M.glsl` |
-| FSRCNNX | [igv/FSRCNN-TensorFlow](https://github.com/igv/FSRCNN-TensorFlow) | GLSL 亮度放大着色器 | LGPL-3.0-or-later（文件内声明） | `portable_config/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl` |
-| NNEDI3 | [bjin/mpv-prescalers](https://github.com/bjin/mpv-prescalers) | GLSL 边缘方向插值着色器 | LGPL-3.0-or-later | `portable_config/shaders/EDI/nnedi3_nns64_win8x4.glsl` |
-| k7 modernAnime | [hooke007/mpv_PlayKit](https://github.com/hooke007/mpv_PlayKit) | GLSL 动画放大着色器（FHD/DT） | MIT（文件内声明） | `portable_config/shaders/ESRGAN/k7_modernAnime_*.glsl` |
-| Adaptive sharpen lite | [hooke007/mpv_PlayKit](https://github.com/hooke007/mpv_PlayKit) | GLSL 自适应锐化 | BSD-2-Clause（文件内声明，原作者 bacondither） | `portable_config/shaders/Adaptive_sharpen/` |
+| Anime4K v4 + GAN | [bloc97/Anime4K](https://github.com/bloc97/Anime4K) | GLSL 重建、降噪、放大与 GAN 放大（49 文件） | MIT（代码与内嵌权重） | `portable_config/shaders/Anime4K/` |
+| ACNet / ARNet | [TianZerL/ACNetGLSL](https://github.com/TianZerL/ACNetGLSL) | GLSL CNN 放大（33 文件） | MIT（代码与内嵌权重） | `portable_config/shaders/ACNet/` |
+| ArtCNN | [Artoriuz/ArtCNN](https://github.com/Artoriuz/ArtCNN) | GLSL CNN 放大（6 文件） | MIT（代码与 ONNX 权重同仓库） | `portable_config/shaders/ArtCNN/` |
+| CuNNy | [funnyplanter/CuNNy](https://github.com/funnyplanter/CuNNy) | GLSL CNN 放大/降噪（18 文件，非 dp4a） | LGPL-3.0-or-later（代码与预训练权重同仓库） | `portable_config/shaders/CuNNy/` |
+| AiUpscale | [Alexkral/AviSynthAiUpscale](https://github.com/Alexkral/AviSynthAiUpscale) | GLSL 动漫/照片/线稿放大（36 文件） | GPL-3.0-only | `portable_config/shaders/AiUpscale/` |
+| NNEDI3 + RAVU | [bjin/mpv-prescalers](https://github.com/bjin/mpv-prescalers) | GLSL 边缘方向插值与 RAVU 放大（26 文件） | LGPL-3.0-or-later（生成器与 .hook 数据） | `portable_config/shaders/EDI/`, `RAISR/` |
+| CfL Prediction | [Artoriuz/glsl-chroma-from-luma-prediction](https://github.com/Artoriuz/glsl-chroma-from-luma-prediction) | GLSL 色度重建 | MIT | `portable_config/shaders/CfL/CfL_Prediction*.glsl` |
+| Joint/Fast Bilateral | [Artoriuz/glsl-joint-bilateral](https://github.com/Artoriuz/glsl-joint-bilateral) | GLSL 色度重建 | MIT | `portable_config/shaders/CfL/JointBilateral.glsl`, `FastBilateral.glsl` |
+| PixelClipper | [Artoriuz/glsl-pixel-clipper](https://github.com/Artoriuz/glsl-pixel-clipper) | GLSL 高光裁剪 | MIT | `portable_config/shaders/ETC/PixelClipper.glsl` |
+| AN3223 denoise/deband/guided | [AN3223/dotfiles](https://github.com/AN3223/dotfiles) | GLSL nlmeans、hdeband、guided（14 文件） | LGPL-2.1-or-later（逐文件头） | `portable_config/shaders/nlmeans/`, `Deband/`, `guided/` |
+| Adaptive sharpen lite | [hooke007/mpv_PlayKit](https://github.com/hooke007/mpv_PlayKit) | GLSL 自适应锐化（3 文件） | BSD-2-Clause（派生自 bacondither HLSL） | `portable_config/shaders/Adaptive_sharpen/` |
+| FSRCNNX | [igv/FSRCNN-TensorFlow](https://github.com/igv/FSRCNN-TensorFlow) | GLSL 亮度放大（1 文件） | LGPL-3.0-or-later（文件内声明；源码仓库 MIT） | `portable_config/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl` |
 
 `d3dcompiler_43.dll` 是 Microsoft DirectX 的可再分发组件，不是 mpv 或本项目的
 GPL 代码；它由 shinchiro 的 Windows 构建附带，按 Microsoft 的 DirectX
@@ -54,18 +60,30 @@ licenses/
   yt-dlp-windows/THIRD_PARTY_LICENSES.txt
   yt-dlp-linux/LICENSE                    # Linux 包
   yt-dlp-linux/THIRD_PARTY_LICENSES.txt
-  anime4k-restore/LICENSE                 # MIT
-  anime4k-upscale-gan/LICENSE             # MIT
-  fsrcnnx/LGPL-3.0-or-later.txt
-  nnedi3/LGPL-3.0-or-later.txt
-  k7-modernanime/MIT.txt
+  acnet/LICENSE
   adaptive-sharpen-lite/BSD-2-Clause.txt
+  aiupscale/LICENSE
+  an3223-denoise/LGPL-2.1-or-later.txt
+  anime4k-gan/LICENSE
+  anime4k-v4/LICENSE
+  artcnn/LICENSE
+  chroma_from_luma_prediction/LICENSE
+  cunny/LICENSE
+  fsrcnnx/LGPL-3.0-or-later.txt
+  fsrcnnx/MIT.txt
+  joint_bilateral/LICENSE
+  mpv-prescalers/LICENSE
+  pixel_clipper/LICENSE
 ```
 
-着色器不进入仓库：`manifests/shaders.yml` 只记录上游仓库、固定提交、文件路径和
-SHA-256；`build.resolve` 解析许可证，`build.fetch` 在 CI 下载，`build.assemble`
-安装到 `portable_config/shaders/`。Ani4Kv2/AniSD 的模型权重为 CC BY-NC 4.0，
-QCOM 的来源和许可证无法确认，因此都没有列入组件表。
+着色器不进入仓库：`manifests/shaders.yml` 只记录真正上游仓库、完整 commit、
+文件路径、SHA-256、代码许可证和（AI shader 的）模型来源/许可证；
+`build.resolve` 解析许可证，`build.fetch` 在 CI 下载，`build.assemble` 安装到
+`portable_config/shaders/`。Ani4Kv2/AniSD 的模型权重为 CC BY-NC 4.0，
+AnimeJaNai 为 CC BY-NC-SA 4.0，k7/QCOM/ESPCN/LUT/Shadertoy 等无法证明完整
+许可证链，因此都没有列入组件表。逐文件处置见
+[docs/shader-license-audit.md](docs/shader-license-audit.md) 和
+`manifests/shader-audit.json`。
 
 具体文件名以 `licenses/INDEX.json` 为准。`INDEX.json` 的 `license` 字段是**逐文件
 SPDX**（例如 `LICENSE.LGPL` 标为 `LGPL-2.1-or-later`，`LICENSE.GPL` 标为

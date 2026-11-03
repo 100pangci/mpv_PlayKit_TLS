@@ -25,6 +25,7 @@ from .common import (
     read_json,
     remove_tree,
     sha256_file,
+    shader_manifest_fields,
     write_json,
 )
 from .extract import DEFAULT_REMOVED_HOOKS, extract_component, hook_is_removed
@@ -327,6 +328,7 @@ def write_metadata(
                     for item in entry.get("files", [])
                 ],
                 **manifest_license_fields(locked.get("license")),
+                **shader_manifest_fields(locked),
             }
             continue
         if locked.get("sha256") and entry.get("sha256") != locked.get("sha256"):
@@ -340,6 +342,7 @@ def write_metadata(
             "asset_name": locked.get("asset_name"),
             "sha256": entry.get("sha256"),
             **manifest_license_fields(locked.get("license")),
+            **shader_manifest_fields(locked),
         }
 
     # Record the exact mpv build used by this platform.  Windows and Linux may

@@ -10,6 +10,7 @@ import unittest
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 from build.common import ROOT, load_manifests, package_filename, read_json, sha256_file
 from build.decide import compact_components, release_components
@@ -29,14 +30,22 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("uosc", components)
         self.assertIn("lxgw-wenkai-mono-lite", components)
         for identifier in (
-            "anime4k-restore",
-            "anime4k-upscale-gan",
-            "fsrcnnx",
-            "nnedi3",
-            "k7-modernanime",
+            "anime4k-v4",
+            "anime4k-gan",
+            "acnet",
+            "artcnn",
+            "cunny",
+            "aiupscale",
+            "mpv-prescalers",
+            "chroma_from_luma_prediction",
+            "joint_bilateral",
+            "pixel_clipper",
+            "an3223-denoise",
             "adaptive-sharpen-lite",
+            "fsrcnnx",
         ):
             self.assertIn(identifier, components)
+        self.assertNotIn("k7-modernanime", components)
 
     def test_license_files_have_spdx(self) -> None:
         _, components = load_manifests()
@@ -54,12 +63,23 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(labels[("mpv-linux", "LICENSE.GPL")], "GPL-2.0-or-later")
         self.assertEqual(labels[("mpv-linux", "LICENSE.LGPL")], "LGPL-2.1-or-later")
         self.assertEqual(labels[("yt-dlp-windows", "THIRD_PARTY_LICENSES.txt")], "NOASSERTION")
-        self.assertEqual(labels[("anime4k-restore", "LICENSE")], "MIT")
-        self.assertEqual(labels[("anime4k-upscale-gan", "LICENSE")], "MIT")
-        self.assertEqual(labels[("k7-modernanime", "MIT.txt")], "MIT")
+        for identifier in (
+            "anime4k-v4",
+            "anime4k-gan",
+            "acnet",
+            "artcnn",
+            "chroma_from_luma_prediction",
+            "joint_bilateral",
+            "pixel_clipper",
+        ):
+            self.assertEqual(labels[(identifier, "LICENSE")], "MIT", identifier)
+        self.assertEqual(labels[("cunny", "LICENSE")], "LGPL-3.0-or-later")
+        self.assertEqual(labels[("aiupscale", "LICENSE")], "GPL-3.0-only")
+        self.assertEqual(labels[("mpv-prescalers", "LICENSE")], "LGPL-3.0-or-later")
         self.assertEqual(labels[("adaptive-sharpen-lite", "BSD-2-Clause.txt")], "BSD-2-Clause")
-        self.assertEqual(labels[("nnedi3", "LGPL-3.0-or-later.txt")], "LGPL-3.0-or-later")
+        self.assertEqual(labels[("an3223-denoise", "LGPL-2.1-or-later.txt")], "LGPL-2.1-or-later")
         self.assertEqual(labels[("fsrcnnx", "LGPL-3.0-or-later.txt")], "LGPL-3.0-or-later")
+        self.assertEqual(labels[("fsrcnnx", "MIT.txt")], "MIT")
 
     def test_multi_license_components_use_scoped_parts(self) -> None:
         _, components = load_manifests()
@@ -135,28 +155,49 @@ class ManifestTests(unittest.TestCase):
 
         _, components = load_manifests()
         targets = shader_targets()
-        self.assertEqual(len(targets), 7)
+        self.assertGreaterEqual(len(targets), 150)
         self.assertTrue(all(target.startswith("portable_config/shaders/") for target in targets))
         self.assertTrue(all(target.endswith(".glsl") for target in targets))
-        for identifier in (
-            "anime4k-restore",
-            "anime4k-upscale-gan",
-            "nnedi3",
-            "k7-modernanime",
-            "adaptive-sharpen-lite",
-        ):
-            component = components[identifier]
-            self.assertEqual(component["kind"], "raw-files")
-            self.assertRegex(component["ref"], r"^[0-9a-f]{40}$|^v4\.0\.1$")
-            for item in component["files"]:
-                self.assertRegex(item["sha256"], r"^[0-9a-f]{64}$")
-                self.assertIn(item["target"], targets)
-                self.assertIn(item["license"], {"MIT", "BSD-2-Clause", "LGPL-3.0-or-later"})
+        shader_components = {
+            identifier: component
+            for identifier, component in components.items()
+            if component.get("_manifest") == "shaders.yml"
+        }
+        self.assertGreaterEqual(len(shader_components), 12)
+        allowed_licenses = {
+            "MIT",
+            "BSD-2-Clause",
+            "GPL-3.0-only",
+            "LGPL-2.1-or-later",
+            "LGPL-3.0-or-later",
+        }
+        for identifier, component in shader_components.items():
+            self.assertIn(component["status"], {"SAFE", "SAFE_WITH_NOTICE"}, identifier)
+            self.assertTrue(component.get("family"), identifier)
+            self.assertIn(component["license"]["spdx"], allowed_licenses, identifier)
+            if component["kind"] == "raw-files":
+                self.assertRegex(component["ref"], r"^[0-9a-f]{40}$", identifier)
+                for item in component["files"]:
+                    self.assertRegex(item["sha256"], r"^[0-9a-f]{64}$", identifier)
+                    self.assertIn(item["target"], targets, identifier)
+                    self.assertIn(item["license"], allowed_licenses, identifier)
+            model = component.get("model")
+            if model:
+                self.assertTrue(model.get("required"), identifier)
+                self.assertRegex(model["source_ref"], r"^[0-9a-f]{40}$", identifier)
+                self.assertIn(model["license_spdx"], allowed_licenses, identifier)
+                declared = {
+                    item["path"] for item in component["license"]["files"]
+                }
+                self.assertIn(model["license_path"], declared, identifier)
         self.assertEqual(components["fsrcnnx"]["kind"], "file")
         self.assertIn(
             "portable_config/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl",
             targets,
         )
+        # The hooke007-only model conversions are not in the distributable
+        # manifest; only audited safe upstreams are.
+        self.assertNotIn("k7-modernanime", components)
 
     def test_mpv_linux_stable_asset(self) -> None:
         _, components = load_manifests()
@@ -169,6 +210,382 @@ class ManifestTests(unittest.TestCase):
     def test_strict_template(self) -> None:
         with self.assertRaises(Exception):
             render("{missing}", {})
+
+
+class ShaderAuditTests(unittest.TestCase):
+    def test_audit_covers_every_declared_target(self) -> None:
+        from build.shaders import load_shader_audit, shader_targets
+
+        audit = load_shader_audit()
+        self.assertEqual(audit["schema"], 1)
+        self.assertEqual(audit["baseline"]["repository"], "hooke007/mpv_PlayKit")
+        self.assertRegex(audit["baseline"]["commit"], r"^[0-9a-f]{40}$")
+        self.assertGreaterEqual(audit["baseline"]["file_count"], 400)
+        targets = set(shader_targets())
+        included = {
+            entry["tls_target"]
+            for entry in audit["entries"]
+            if entry.get("included_in_tls")
+        }
+        self.assertEqual(included, targets)
+        self.assertTrue(all(entry.get("reason") for entry in audit["entries"]))
+        statuses = {entry["status"] for entry in audit["entries"]}
+        self.assertTrue(
+            {"SAFE", "SAFE_WITH_NOTICE", "NONCOMMERCIAL", "UNKNOWN",
+             "CLEAN_ROOM_REIMPLEMENT_CANDIDATE"} <= statuses
+        )
+
+    def test_audit_model_licenses_match_manifest(self) -> None:
+        from build.shaders import load_shader_audit
+
+        _, components = load_manifests()
+        audit = load_shader_audit()
+        by_target: dict[str, list[dict]] = {}
+        for entry in audit["entries"]:
+            if entry.get("included_in_tls"):
+                by_target.setdefault(entry["tls_target"], []).append(entry)
+        for identifier, component in components.items():
+            if component.get("_manifest") != "shaders.yml" or not component.get("model"):
+                continue
+            model = component["model"]
+            for target in (
+                [item["target"] for item in component.get("files", [])]
+                + [item["target"] for item in component.get("install", [])]
+            ):
+                entries = by_target.get(target)
+                self.assertTrue(entries, target)
+                self.assertTrue(
+                    all(entry["model_license"] == model["license_spdx"] for entry in entries),
+                    target,
+                )
+
+    def test_audit_rejects_unsafe_included_entry(self) -> None:
+        import copy
+
+        from build.common import BuildError
+        from build.shaders import load_shader_audit, validate_shader_audit
+
+        audit = copy.deepcopy(load_shader_audit())
+        included = next(entry for entry in audit["entries"] if entry["included_in_tls"])
+        included["status"] = "NONCOMMERCIAL"
+        with self.assertRaises(BuildError):
+            validate_shader_audit(audit)
+
+    def test_audit_rejects_upstream_path_mismatch(self) -> None:
+        import copy
+
+        from build.common import BuildError
+        from build.shaders import load_shader_audit, validate_shader_audit
+
+        audit = copy.deepcopy(load_shader_audit())
+        included = next(entry for entry in audit["entries"] if entry["included_in_tls"])
+        included["upstream_path"] = "wrong/path.glsl"
+        with self.assertRaisesRegex(BuildError, "upstream_path disagrees"):
+            validate_shader_audit(audit)
+
+    def test_audit_rejects_missing_target(self) -> None:
+        import copy
+
+        from build.common import BuildError
+        from build.shaders import load_shader_audit, validate_shader_audit
+
+        audit = copy.deepcopy(load_shader_audit())
+        audit["entries"] = [
+            entry for entry in audit["entries"] if not entry["included_in_tls"]
+        ]
+        with self.assertRaises(BuildError):
+            validate_shader_audit(audit)
+
+
+class ShaderManifestValidationTests(unittest.TestCase):
+    def _component(self) -> dict:
+        return {
+            "id": "demo-shader",
+            "kind": "raw-files",
+            "family": "demo",
+            "status": "SAFE",
+            "upstream": "owner/repo",
+            "ref": "a" * 40,
+            "files": [
+                {
+                    "source": "shaders/demo.glsl",
+                    "target": "portable_config/shaders/Demo/demo.glsl",
+                    "sha256": "b" * 64,
+                    "license": "MIT",
+                }
+            ],
+            "license": {
+                "spdx": "MIT",
+                "files": [
+                    {
+                        "path": "LICENSE",
+                        "license": "MIT",
+                        "repository": "owner/repo",
+                        "ref": "a" * 40,
+                    }
+                ],
+            },
+        }
+
+    def test_rejects_non_distributable_status(self) -> None:
+        from build.common import BuildError, validate_shader_component
+
+        component = self._component()
+        component["status"] = "NONCOMMERCIAL"
+        with self.assertRaises(BuildError):
+            validate_shader_component("demo", component)
+
+    def test_rejects_floating_raw_ref(self) -> None:
+        from build.common import BuildError, validate_shader_component
+
+        component = self._component()
+        component["ref"] = "main"
+        with self.assertRaises(BuildError):
+            validate_shader_component("demo", component)
+
+    def test_rejects_model_without_license_file(self) -> None:
+        from build.common import BuildError, validate_shader_component
+
+        component = self._component()
+        component["model"] = {
+            "required": True,
+            "name": "demo weights",
+            "author": "author",
+            "source_repository": "owner/repo",
+            "source_ref": "c" * 40,
+            "source_paths": ["weights"],
+            "license_spdx": "MIT",
+            "license_path": "MODEL-LICENSE.txt",
+        }
+        with self.assertRaises(BuildError):
+            validate_shader_component("demo", component)
+
+    def test_rejects_short_derived_commit(self) -> None:
+        from build.common import BuildError, validate_shader_component
+
+        component = self._component()
+        component["derived_from"] = [
+            {
+                "repository": "owner/upstream",
+                "commit": "abc123",
+                "path": "shader.hlsl",
+                "license": "MIT",
+            }
+        ]
+        with self.assertRaises(BuildError):
+            validate_shader_component("demo", component)
+
+    def test_safe_license_expression(self) -> None:
+        from build.common import is_safe_license
+
+        for value in ("MIT", "BSD-2-Clause", "LGPL-2.1-or-later", "GPL-3.0-only"):
+            self.assertTrue(is_safe_license(value), value)
+        for value in ("CC-BY-NC-4.0", "NOASSERTION", "", None, "UNKNOWN"):
+            self.assertFalse(is_safe_license(value), value)
+
+
+class ShaderUpdateTests(unittest.TestCase):
+    OLD = "a" * 40
+    NEW = "b" * 40
+    LICENSE = "https://raw.githubusercontent.com/owner/repo/{}/LICENSE"
+    SHADER = "https://raw.githubusercontent.com/owner/repo/{}/shaders/demo.glsl"
+
+    def _fixture(self, *, marker: str = "") -> tuple[tempfile.TemporaryDirectory, Path]:
+        root = tempfile.TemporaryDirectory()
+        path = Path(root.name)
+        (path / "project.yml").write_text("repository: owner/repo\n", encoding="utf-8")
+        for name in ("binaries.yml", "scripts.yml", "resources.yml"):
+            (path / name).write_text("components: []\n", encoding="utf-8")
+        update = {"mode": "latest-commit"}
+        if marker:
+            update["license_marker"] = marker
+        manifest = {
+            "schema": 2,
+            "components": [
+                {
+                    "id": "demo",
+                    "kind": "raw-files",
+                    "family": "demo",
+                    "status": "SAFE",
+                    "platforms": "all",
+                    "upstream": "owner/repo",
+                    "ref": self.OLD,
+                    "version": "2026-01-01",
+                    "update": update,
+                    "files": [
+                        {
+                            "source": "shaders/demo.glsl",
+                            "target": "portable_config/shaders/Demo/demo.glsl",
+                            "sha256": "c" * 64,
+                            "license": "MIT",
+                        }
+                    ],
+                    "license": {
+                        "spdx": "MIT",
+                        "files": [
+                            {
+                                "path": "LICENSE",
+                                "license": "MIT",
+                                "repository": "owner/repo",
+                                "ref": self.OLD,
+                                "source_path": "LICENSE",
+                            }
+                        ],
+                    },
+                    "notes": "demo",
+                }
+            ],
+        }
+        import yaml
+
+        (path / "shaders.yml").write_text(
+            "# header must survive updates\n"
+            + yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        audit = {
+            "schema": 1,
+            "baseline": {
+                "repository": "hooke007/mpv_PlayKit",
+                "tag": "20260510",
+                "commit": "d" * 40,
+                "file_count": 0,
+            },
+            "entries": [
+                {
+                    "hooke_path": None,
+                    "family": "demo",
+                    "original_upstream": "owner/repo",
+                    "upstream_path": "shaders/demo.glsl",
+                    "same_or_modified": "upstream_only",
+                    "code_license": "MIT",
+                    "model_license": None,
+                    "status": "SAFE",
+                    "reason": f"Included from owner/repo@{self.OLD}.",
+                    "replacement_source": f"owner/repo@{self.OLD}",
+                    "included_in_tls": True,
+                    "upstream_commit": self.OLD,
+                    "tls_target": "portable_config/shaders/Demo/demo.glsl",
+                    "tls_sha256": "c" * 64,
+                }
+            ],
+        }
+        (path / "shader-audit.json").write_text(
+            json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        return root, path
+
+    def _downloads(self, shader: bytes, new_license: bytes = b"MIT license"):
+        table = {
+            self.LICENSE.format(self.OLD): b"MIT license",
+            self.LICENSE.format(self.NEW): new_license,
+            self.SHADER.format(self.NEW): shader,
+        }
+
+        def fake(url: str, **_: object) -> bytes:
+            if url not in table:
+                raise AssertionError(f"unexpected download: {url}")
+            return table[url]
+
+        return fake
+
+    def _refresh(self, path: Path, download, *, check: bool):
+        from build import shader_update
+
+        with mock.patch.object(shader_update, "latest_commit", return_value=(self.NEW, "2026-11-01")), \
+                mock.patch.object(shader_update, "download_raw", side_effect=download):
+            return shader_update.refresh(path, check=check)
+
+    def test_check_mode_reports_without_writing(self) -> None:
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        before = (path / "shaders.yml").read_bytes()
+        before_audit = (path / "shader-audit.json").read_bytes()
+        summary = self._refresh(path, self._downloads(b"//! demo\n"), check=True)
+        self.assertEqual(summary["changed_components"], ["demo"])
+        self.assertEqual(summary["changed_files"], 1)
+        self.assertEqual((path / "shaders.yml").read_bytes(), before)
+        self.assertEqual((path / "shader-audit.json").read_bytes(), before_audit)
+
+    def test_refresh_updates_manifest_and_audit(self) -> None:
+        import hashlib
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        summary = self._refresh(path, self._downloads(b"//! demo\n"), check=False)
+        self.assertEqual(summary["changed_components"], ["demo"])
+        digest = hashlib.sha256(b"//! demo\n").hexdigest()
+        text = (path / "shaders.yml").read_text(encoding="utf-8")
+        self.assertIn("# header must survive updates", text)
+        manifest = __import__("yaml").safe_load(text)
+        component = manifest["components"][0]
+        self.assertEqual(component["ref"], self.NEW)
+        self.assertEqual(component["version"], "2026-11-01")
+        self.assertEqual(component["files"][0]["sha256"], digest)
+        self.assertEqual(component["license"]["files"][0]["ref"], self.NEW)
+        audit = json.loads((path / "shader-audit.json").read_text(encoding="utf-8"))
+        entry = audit["entries"][0]
+        self.assertEqual(entry["upstream_commit"], self.NEW)
+        self.assertEqual(entry["tls_sha256"], digest)
+        self.assertNotIn(self.OLD, entry["reason"])
+        self.assertNotIn(self.OLD, audit["entries"][0]["replacement_source"])
+
+    def test_latest_tag_uses_the_release_tag_as_version(self) -> None:
+        import yaml
+        from build import shader_update
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        manifest = yaml.safe_load((path / "shaders.yml").read_text(encoding="utf-8"))
+        manifest["components"][0]["update"] = {"mode": "latest-tag"}
+        (path / "shaders.yml").write_text(
+            "# header\n" + yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8"
+        )
+        with mock.patch.object(
+            shader_update, "latest_tag_commit", return_value=(self.NEW, "v4.1.0")
+        ), mock.patch.object(
+            shader_update, "download_raw", side_effect=self._downloads(b"//! demo\n")
+        ):
+            shader_update.refresh(path, check=False)
+        updated = yaml.safe_load((path / "shaders.yml").read_text(encoding="utf-8"))
+        self.assertEqual(updated["components"][0]["version"], "v4.1.0")
+        self.assertEqual(updated["components"][0]["ref"], self.NEW)
+
+    def test_license_change_stops_the_update(self) -> None:
+        from build.common import BuildError
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        before = (path / "shaders.yml").read_bytes()
+        with self.assertRaisesRegex(BuildError, "license text changed"):
+            self._refresh(
+                path,
+                self._downloads(b"//! demo\n", new_license=b"MIT license, revised"),
+                check=False,
+            )
+        self.assertEqual((path / "shaders.yml").read_bytes(), before)
+
+    def test_missing_license_marker_stops_the_update(self) -> None:
+        from build.common import BuildError
+
+        root, path = self._fixture(marker="GNU Lesser General Public License")
+        self.addCleanup(root.cleanup)
+        with self.assertRaisesRegex(BuildError, "license marker"):
+            self._refresh(path, self._downloads(b"//! no marker\n"), check=False)
+
+    def test_missing_declared_file_stops_the_update(self) -> None:
+        from build.common import BuildError
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+
+        def download(url: str, **_: object) -> bytes:
+            if url == self.LICENSE.format(self.NEW):
+                return b"MIT license"
+            raise BuildError("404")
+
+        with self.assertRaises(BuildError):
+            self._refresh(path, download, check=False)
 
 
 class VersionTests(unittest.TestCase):
@@ -757,14 +1174,43 @@ class ScriptContentTests(unittest.TestCase):
 
         menu = (ROOT / "config" / "common" / "menu.conf").read_text(encoding="utf-8")
         bindings = (ROOT / "config" / "common" / "input.conf").read_text(encoding="utf-8")
-        targets = shader_targets()
+        targets = set(shader_targets())
         self.assertTrue(targets)
-        for target in targets:
-            self.assertIn(f'"~~/{target.removeprefix("portable_config/")}"', menu)
-            self.assertIn(f'"~~/{target.removeprefix("portable_config/")}"', bindings)
+        for text, label in ((menu, "menu"), (bindings, "input")):
+            referenced = {
+                "portable_config/" + match
+                for match in re.findall(r"~~/(shaders/[^\"']+\.glsl)", text)
+            }
+            self.assertTrue(referenced, label)
+            self.assertLessEqual(referenced, targets, label)
+        # The curated shortcuts must point at real, declared targets.
+        curated = {
+            "portable_config/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl",
+            "portable_config/shaders/EDI/nnedi3_nns64_win8x4.glsl",
+            "portable_config/shaders/RAISR/ravu_lite_r3.glsl",
+            "portable_config/shaders/ArtCNN/ArtCNN_C4F16.glsl",
+            "portable_config/shaders/ACNet/acnet_f8b8.glsl",
+            "portable_config/shaders/ACNet/arnet_f8b8.glsl",
+            "portable_config/shaders/CuNNy/CuNNy-2x12-SOFT.glsl",
+            "portable_config/shaders/CuNNy/CuNNy-4x32-SOFT.glsl",
+            "portable_config/shaders/AiUpscale/Photo/2x/AiUpscale_Medium_2x_Photo.glsl",
+            "portable_config/shaders/Anime4K/Anime4K_Restore_CNN_L.glsl",
+            "portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x2_M.glsl",
+            "portable_config/shaders/CfL/CfL_Prediction_Lite.glsl",
+            "portable_config/shaders/CfL/JointBilateral.glsl",
+            "portable_config/shaders/nlmeans/nlmeans.glsl",
+            "portable_config/shaders/Deband/hdeband.glsl",
+            "portable_config/shaders/ETC/PixelClipper.glsl",
+            "portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_RT.glsl",
+        }
+        self.assertLessEqual(curated, targets)
+        for target in curated:
+            quoted = f'"~~/{target.removeprefix("portable_config/")}"'
+            self.assertIn(quoted, menu, target)
+            self.assertIn(quoted, bindings, target)
         self.assertIn('change-list glsl-shaders clr ""', menu)
         self.assertIn("Ctrl+`", bindings)
-        for excluded in ("QCOM", "Ani4Kv2", "AniSD"):
+        for excluded in ("QCOM", "Ani4Kv2", "AniSD", "k7", "AnimeJaNai", "ESRGAN"):
             self.assertNotIn(excluded, menu)
             self.assertNotIn(excluded, bindings)
 
@@ -1825,6 +2271,33 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(
             release["with"]["lock_sha256"], "${{ needs.resolve.outputs.lock_sha256 }}"
         )
+
+    def test_monthly_refreshes_shader_pins_before_resolving(self) -> None:
+        jobs = self._workflow("monthly-update.yml")["jobs"]
+        resolve = jobs["resolve"]
+        runs = self._runs(resolve)
+        self.assertIn("python -m build.shader_update", runs)
+        self.assertLess(
+            runs.index("python -m build.shader_update"),
+            runs.index("python -m build.resolve"),
+        )
+        self.assertIn("shaders_changed", resolve["outputs"])
+        candidate = next(
+            step
+            for step in resolve["steps"]
+            if step.get("name") == "Prepare candidate commit"
+        )
+        self.assertIn("manifests/shaders.yml", candidate["run"])
+        self.assertIn("manifests/shader-audit.json", candidate["run"])
+        self.assertIn("SHADERS_CHANGED", candidate["run"])
+        commit = jobs["commit-lock"]
+        self.assertIn("shaders_changed", commit["if"])
+        upload = next(
+            step
+            for step in resolve["steps"]
+            if step.get("name") == "Upload candidate lock"
+        )
+        self.assertIn("shaders_changed", upload["if"])
 
     def test_candidate_artifact_always_matches_the_repository_lock(self) -> None:
         jobs = self._workflow("monthly-update.yml")["jobs"]

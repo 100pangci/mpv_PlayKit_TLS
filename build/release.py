@@ -19,6 +19,7 @@ from .common import (
     package_filename,
     read_json,
     sha256_file,
+    shader_manifest_fields,
     write_json,
 )
 from .helper import MIN_HELPER_VERSION
@@ -194,6 +195,7 @@ def main(argv: list[str] | None = None) -> int:
                 "kind": "raw-files",
                 "files": _raw_files(locked),
                 **manifest_license_fields(locked.get("license")),
+                **shader_manifest_fields(locked),
             }
         else:
             components[identifier] = {
@@ -205,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
                 "asset_name": locked.get("asset_name"),
                 "sha256": locked.get("sha256"),
                 **manifest_license_fields(locked.get("license")),
+                **shader_manifest_fields(locked),
             }
         for platform, manifest in embedded.items():
             packaged = (manifest.get("components") or {}).get(identifier)

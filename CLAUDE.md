@@ -140,7 +140,10 @@ manifests + GitHub API
 - `build/patch_uosc.py` 只修改上游 `scripts/uosc/main.lua` 以加入自动 UI 缩放。
   上游锚点变化时构建必须失败，不要放宽为静默跳过；除该文件外 uosc 保持上游。
 - GLSL shader 由 `manifests/shaders.yml` 的 `raw-files` 固定到上游 commit，
-  安装到 7 个精确目标；包内不允许其他 `.glsl`。
+  安装到 manifest 声明的精确目标；包内不允许其他 `.glsl`。
+- shader pin 的月度刷新由 `build.shader_update` 完成；`update.mode` 仅允许
+  `pinned`/`latest-commit`/`latest-tag`，同仓库许可证文本或 `license_marker`
+  变化时必须人工复核。
 - Windows 包根目录是播放器目录（`mpv.exe`、`yt-dlp.exe`、`umpv.exe`）；
   Linux 的 AppImage 解包到 `mpv/`，包根提供 `mpv-playkit` 启动器（设置
   `--config-dir`、`DISABLE_AUTO_UPDATES=1`、PATH），`yt-dlp` 与 `umpv` 在包根。
@@ -223,7 +226,8 @@ helper 中：
 ## 文档索引
 
 - `docs/architecture.md`：目录职责、流水线、确定性、平台差异、校验门禁
-- `docs/upstreams.md`：上游组件表、资产匹配、lock 与许可证固定规则
+- `docs/upstreams.md`：上游组件表、资产匹配、lock 与许可证固定规则、shader pin 更新
+- `docs/shader-license-audit.md`：shader 逐文件许可证审计（JSON 为权威记录）
 - `docs/updater.md`：Rust helper 的命令、事务目录、失败恢复、安全边界
 - `docs/user-patches.md`：schema 1/2 patch 语法与冲突语义
 - `docs/update-checker.md`：Lua 检测器配置、联网门禁、状态文件

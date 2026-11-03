@@ -75,6 +75,12 @@ def _manifest_component_fields(component: dict[str, Any]) -> dict[str, Any]:
         # Content hashes only: re-pinning a license source to a newer commit
         # with identical text must not force a new release.
         "license_files": license_files_summary(license_files),
+        # Shader provenance is part of the published manifest.  Normalize the
+        # lock's `status` and the manifest's `license_status` spelling.
+        "family": component.get("family"),
+        "license_status": component.get("license_status") or component.get("status"),
+        "model": component.get("model"),
+        "derived_from": component.get("derived_from"),
     }
     files = _component_files(component)
     if files is not None:

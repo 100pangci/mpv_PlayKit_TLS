@@ -29,6 +29,9 @@
 manifests/*.yml
       │
       ▼
+build.shader_update ── 仅月度：按 update.mode 移动 shader pin
+      │                  (许可证文本/marker 变化时 fail-closed)
+      ▼
 build.resolve ── GitHub Releases API ──► 候选 sources.lock.json
       │                                   (版本、URL、sha256、许可证 commit/sha256)
       ▼
@@ -71,6 +74,13 @@ gh release create --target <final_sha> ── 仅在此前全部成功时执行
 
 月度工作流的核心约束是：**main 中的 `sources.lock.json` 只能代表已经通过完整
 双平台构建验证的上游组合**。
+
+resolve job 在生成候选 lock 前先运行 `build.shader_update`：它按
+`manifests/shaders.yml` 的 `update.mode` 把 `latest-commit`/`latest-tag` 组件移动
+到新的完整 commit，刷新文件哈希和 `manifests/shader-audit.json`，并拒绝任何
+已声明文件缺失、同仓库许可证文本变化或 `license_marker` 消失的上游改动。刷新后的
+manifest 与 lock 一起进入候选提交；因此双平台构建验证的仍是最终要提交的 pin，
+而不是只在 job 内临时改动的版本。
 
 - `resolve` 只把候选 lock 写成文件并上传 artifact，不修改 main。
 - 候选提交（仓库源码 + 候选 lock）先推送到临时分支。构建作业 checkout 的正是
@@ -278,6 +288,9 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 2. 禁用路径不存在：基线目录、VapourSynth、历史 `thumb_engine`、模型、
    AppImage 自更新/yt-dlp 下载 hook、运行时缓存和状态文件；`.glsl` 只允许
    `manifests/shaders.yml` 列出的精确目标。
+   同时重新读取 `manifests/shaders.yml` 与 `manifests/shader-audit.json`，校验
+   每个 shader 的 family/status/license、模型许可证文本哈希与 `embedded_in`，
+   并要求审计中 `included_in_tls` 的目标集合与 manifest 完全相等。
 3. `mpv.conf` 中 `~~/` 引用存在。
 4. `update-check.lua` 的 `enabled=no` 门禁位于任何 subprocess 调用之前。
 5. 更新器元数据：`protocol=1`、`patch_schema=1`（兼容旧 helper 的桥接版本；
@@ -298,7 +311,7 @@ uosc 5.13 固定向名为 `thumbfast` 的脚本发送 `thumb` / `clear` 消息�
 
 | 工作流 | 触发 | 行为 |
 | --- | --- | --- |
-| `monthly-update.yml` | 每月 1 日 05:17 UTC；手动 | resolve → 候选 artifact → build → commit-lock → release |
+| `monthly-update.yml` | 每月 1 日 05:17 UTC；手动 | shader pin 刷新 → resolve → 候选 artifact → build → commit-lock → release |
 | `build.yml` | push、PR、手动、被调用 | Python 测试 + Rust 更新器测试（Ubuntu/Windows）+ Windows/Linux 构建、冒烟、打包、校验；被调用时先安装并校验候选 lock |
 | `release.yml` | 被 `monthly-update.yml` 调用 | 校验候选 lock 字节，从 Actions 缓存取回两个平台产物，生成发布元数据并在最终提交上创建 Release |
 

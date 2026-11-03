@@ -9,9 +9,20 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-from .common import PLATFORM_ARCHIVE, PLATFORM_OS, fail, log, read_json, sha256_file
+from .common import (
+    PLATFORM_ARCHIVE,
+    PLATFORM_OS,
+    SHADER_STATUSES,
+    fail,
+    is_safe_license,
+    is_platform_selected,
+    load_manifests,
+    log,
+    read_json,
+    sha256_file,
+)
 from .extract import DEFAULT_REMOVED_HOOKS, hook_is_removed
-from .shaders import shader_targets
+from .shaders import load_shader_audit, shader_targets
 from .userstate import verify_package_state
 
 REQUIRED = [
@@ -87,12 +98,6 @@ REQUIRED_LICENSES = {
         "licenses/uosc/MPL-2.0.txt",
         "licenses/yt-dlp-windows/LICENSE",
         "licenses/yt-dlp-windows/THIRD_PARTY_LICENSES.txt",
-        "licenses/anime4k-restore/LICENSE",
-        "licenses/anime4k-upscale-gan/LICENSE",
-        "licenses/fsrcnnx/LGPL-3.0-or-later.txt",
-        "licenses/nnedi3/LGPL-3.0-or-later.txt",
-        "licenses/k7-modernanime/MIT.txt",
-        "licenses/adaptive-sharpen-lite/BSD-2-Clause.txt",
     ],
     "linux-x64": [
         "licenses/lxgw-wenkai-mono-lite/OFL.txt",
@@ -105,12 +110,6 @@ REQUIRED_LICENSES = {
         "licenses/uosc/MPL-2.0.txt",
         "licenses/yt-dlp-linux/LICENSE",
         "licenses/yt-dlp-linux/THIRD_PARTY_LICENSES.txt",
-        "licenses/anime4k-restore/LICENSE",
-        "licenses/anime4k-upscale-gan/LICENSE",
-        "licenses/fsrcnnx/LGPL-3.0-or-later.txt",
-        "licenses/nnedi3/LGPL-3.0-or-later.txt",
-        "licenses/k7-modernanime/MIT.txt",
-        "licenses/adaptive-sharpen-lite/BSD-2-Clause.txt",
     ],
 }
 
@@ -234,7 +233,19 @@ def check_licenses(stage: Path, platform: str) -> None:
         for entry in index.get("files", [])
         if isinstance(entry, dict)
     }
-    for relative in REQUIRED_LICENSES.get(platform, []):
+    required = list(REQUIRED_LICENSES.get(platform, []))
+    # Shader licenses are derived from manifests/shaders.yml, including the
+    # separate license text named by each AI model declaration.  A new shader
+    # cannot be added without its license text appearing in the package.
+    _, components = load_manifests()
+    for identifier, component in components.items():
+        if component.get("_manifest") != "shaders.yml":
+            continue
+        if not is_platform_selected(component, platform):
+            continue
+        for item in (component.get("license") or {}).get("files", []):
+            required.append(f"licenses/{identifier}/{item['path']}")
+    for relative in sorted(set(required)):
         if not (stage / relative).is_file():
             fail(f"missing required license text: {relative}")
         entry = entries.get(relative)
@@ -262,6 +273,97 @@ def check_manifest_license_files(stage: Path, manifest: dict) -> None:
                 fail(f"manifest license file is missing from licenses/INDEX.json: {relative}")
             if entry.get("sha256") != item.get("sha256"):
                 fail(f"manifest license hash differs from licenses/INDEX.json: {relative}")
+
+
+def check_shader_provenance(stage: Path, manifest: dict) -> None:
+    """Shipped shaders must match the safe manifest and the full audit.
+
+    This is deliberately independent from the package manifest: it re-reads
+    manifests/shaders.yml and manifests/shader-audit.json from the repository,
+    so deleting a provenance field from the package cannot hide it.
+    """
+    _, components = load_manifests()
+    shader_components = {
+        identifier: component
+        for identifier, component in components.items()
+        if component.get("_manifest") == "shaders.yml"
+    }
+    if not shader_components:
+        fail("shaders.yml declares no shader components")
+
+    declared_targets: set[str] = set()
+    for identifier, component in sorted(shader_components.items()):
+        status = str(component.get("status") or "")
+        if status not in SHADER_STATUSES:
+            fail(f"{identifier}: shader status is not distributable: {status}")
+        if not component.get("family"):
+            fail(f"{identifier}: shader family is missing")
+        license_info = component.get("license") or {}
+        if not is_safe_license(license_info.get("spdx")):
+            fail(f"{identifier}: shader license is not redistributable")
+        for item in license_info.get("files", []):
+            if not is_safe_license(item.get("license")):
+                fail(f"{identifier}: shader license file is not redistributable")
+        for item in component.get("files", []):
+            declared_targets.add(str(item["target"]))
+        for item in component.get("install", []):
+            if str(item.get("target", "")).lower().endswith(".glsl"):
+                declared_targets.add(str(item["target"]))
+
+        packaged = (manifest.get("components") or {}).get(identifier)
+        if not isinstance(packaged, dict):
+            fail(f"{identifier}: shader component is missing from manifest.json")
+        if packaged.get("family") != component.get("family"):
+            fail(f"{identifier}: packaged family differs from shaders.yml")
+        if packaged.get("license_status") != status:
+            fail(f"{identifier}: packaged license_status differs from shaders.yml")
+        model = component.get("model")
+        if model:
+            packaged_model = packaged.get("model")
+            if not isinstance(packaged_model, dict):
+                fail(f"{identifier}: packaged manifest is missing model provenance")
+            for field in ("name", "author", "source_repository", "source_ref", "license_spdx", "license_path"):
+                if packaged_model.get(field) != model.get(field):
+                    fail(f"{identifier}: packaged model field differs: {field}")
+            license_file = packaged_model.get("license_file") or {}
+            if not re.fullmatch(r"[0-9a-f]{64}", str(license_file.get("sha256") or "")):
+                fail(f"{identifier}: packaged model license has no sha256")
+            if not packaged_model.get("embedded_in"):
+                fail(f"{identifier}: packaged model has no embedded file hashes")
+
+    if declared_targets != set(shader_targets()):
+        fail("shaders.yml targets disagree with build.shaders.shader_targets()")
+
+    audit = load_shader_audit()
+    included = {
+        entry["tls_target"]
+        for entry in audit.get("entries", [])
+        if entry.get("included_in_tls")
+    }
+    if included != set(shader_targets()):
+        fail("shader audit included targets disagree with shaders.yml")
+
+    index_path = stage / "licenses" / "INDEX.json"
+    if not index_path.is_file():
+        fail("licenses/INDEX.json missing")
+    index_entries = {
+        entry.get("file"): entry
+        for entry in read_json(index_path).get("files", [])
+        if isinstance(entry, dict)
+    }
+    for identifier, component in sorted(shader_components.items()):
+        model = component.get("model")
+        if not model:
+            continue
+        relative = f"licenses/{identifier}/{model['license_path']}"
+        entry = index_entries.get(relative)
+        if not entry:
+            fail(f"{identifier}: model license text is not indexed: {relative}")
+        packaged = (manifest.get("components") or {}).get(identifier) or {}
+        packaged_model = packaged.get("model") or {}
+        license_file = packaged_model.get("license_file") or {}
+        if entry.get("sha256") != license_file.get("sha256"):
+            fail(f"{identifier}: model license hash differs from licenses/INDEX.json")
 
 
 SUBPROCESS_CALL = re.compile(r"""name\s*=\s*["']subprocess["']""")
@@ -390,6 +492,7 @@ def check_stage(stage: Path, platform: str, version: str | None) -> None:
     check_installer(stage, platform)
     check_licenses(stage, platform)
     check_manifest_license_files(stage, manifest)
+    check_shader_provenance(stage, manifest)
     check_updater_metadata(stage, manifest, platform)
     check_umpv_metadata(stage, manifest, platform)
     verify_package_state(stage, manifest.get("playkit_version", ""), platform)

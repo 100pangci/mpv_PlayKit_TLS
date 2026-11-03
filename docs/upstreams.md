@@ -10,12 +10,19 @@
 | `yt-dlp-linux` | `yt-dlp/yt-dlp` | latest | `^yt-dlp_linux$` | `{release_tag}` | `yt-dlp` |
 | `uosc` | `tomasklaen/uosc` | latest | `^uosc\.zip$` | `{release_tag}` | `portable_config/scripts/uosc/`, `portable_config/fonts/` |
 | `lxgw-wenkai-mono-lite` | `lxgw/LxgwWenKai-Lite` | latest | `^LXGWWenKaiMonoLite-Regular\.ttf$` | `{release_tag}` | `portable_config/fonts/` |
-| `anime4k-restore` | `bloc97/Anime4K` | raw `v4.0.1` | 固定文件路径 + SHA-256 | `v4.0.1` | `portable_config/shaders/Anime4K/` |
-| `anime4k-upscale-gan` | `bloc97/Anime4K` | raw commit `8e39551` | 固定文件路径 + SHA-256 | `v4.0-GAN-8e39551` | `portable_config/shaders/Anime4K/` |
-| `fsrcnnx` | `igv/FSRCNN-TensorFlow` | tag `1.1` | `^FSRCNNX_x2_16-0-4-1\.glsl$` | `1.1` | `portable_config/shaders/FSRCNNX/` |
-| `nnedi3` | `bjin/mpv-prescalers` | raw commit `b3f0a59` | 固定文件路径 + SHA-256 | `2024-01-11` | `portable_config/shaders/EDI/` |
-| `k7-modernanime` | `hooke007/mpv_PlayKit` | raw commit `4921c67` | 固定文件路径 + SHA-256 | `2026-05-30` | `portable_config/shaders/ESRGAN/` |
-| `adaptive-sharpen-lite` | `hooke007/mpv_PlayKit` | raw commit `4921c67` | 固定文件路径 + SHA-256 | `2026-05-30` | `portable_config/shaders/Adaptive_sharpen/` |
+| `anime4k-v4` | `bloc97/Anime4K` | raw tag `v4.0.1` | 固定文件路径 + SHA-256 | `v4.0.1` | `portable_config/shaders/Anime4K/`（39） |
+| `anime4k-gan` | `bloc97/Anime4K` | raw commit `8e39551` | 固定文件路径 + SHA-256 | `v4.0-GAN-8e39551` | `portable_config/shaders/Anime4K/`（10） |
+| `acnet` | `TianZerL/ACNetGLSL` | raw commit `c7d2d8d` | 固定文件路径 + SHA-256 | `2026-05-11` | `portable_config/shaders/ACNet/`（33） |
+| `artcnn` | `Artoriuz/ArtCNN` | raw commit `0837e53` | 固定文件路径 + SHA-256 | `2026-10-22` | `portable_config/shaders/ArtCNN/`（6） |
+| `cunny` | `funnyplanter/CuNNy` | raw commit `906031b` | 固定文件路径 + SHA-256 | `2025-08-29` | `portable_config/shaders/CuNNy/`（18） |
+| `aiupscale` | `Alexkral/AviSynthAiUpscale` | raw commit `d04cf81` | 固定文件路径 + SHA-256 | `2021-03-28` | `portable_config/shaders/AiUpscale/`（36） |
+| `mpv-prescalers` | `bjin/mpv-prescalers` | raw commit `b3f0a59` | 固定文件路径 + SHA-256 | `2024-01-11` | `portable_config/shaders/EDI/`、`RAISR/`（26） |
+| `chroma_from_luma_prediction` | `Artoriuz/glsl-chroma-from-luma-prediction` | raw commit `066dff9` | 固定文件路径 + SHA-256 | `2026-08-15` | `portable_config/shaders/CfL/`（2） |
+| `joint_bilateral` | `Artoriuz/glsl-joint-bilateral` | raw commit `0b4b4a6` | 固定文件路径 + SHA-256 | `2024-11-08` | `portable_config/shaders/CfL/`（2） |
+| `pixel_clipper` | `Artoriuz/glsl-pixel-clipper` | raw commit `92aa621` | 固定文件路径 + SHA-256 | `2024-01-24` | `portable_config/shaders/ETC/`（1） |
+| `an3223-denoise` | `AN3223/dotfiles` | raw commit `4413db6` | 固定文件路径 + SHA-256 | `2026-04-02` | `portable_config/shaders/nlmeans/`、`Deband/`、`guided/`（14） |
+| `adaptive-sharpen-lite` | `hooke007/mpv_PlayKit` | raw commit `1ad89a5` | 固定文件路径 + SHA-256 | `20260510` | `portable_config/shaders/Adaptive_sharpen/`（3） |
+| `fsrcnnx` | `igv/FSRCNN-TensorFlow` | tag `1.1` | `^FSRCNNX_x2_16-0-4-1\.glsl$` | `1.1` | `portable_config/shaders/FSRCNNX/`（1） |
 
 所有 Release 资产匹配都要求 **恰好一个** 资产。零个或多个都会让解析失败并停止发布。
 
@@ -32,24 +39,66 @@
 `kind: raw-files` 用于没有 Release 资产、但需要固定到某个上游提交的文件：
 
 ```yaml
-- id: anime4k-restore
+- id: anime4k-v4
   kind: raw-files
+  family: anime4k
+  status: SAFE
   upstream: bloc97/Anime4K
-  ref: v4.0.1
+  ref: "4029bf701ecaa15f163cdc49cffe5501c1acf410"   # full commit
+  version: v4.0.1
+  update:
+    mode: latest-tag
   files:
     - source: glsl/Restore/Anime4K_Restore_CNN_L.glsl
       target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_L.glsl
       sha256: <64 位小写十六进制>
       license: MIT
+  license:
+    spdx: MIT
+    files:
+      - path: LICENSE
+        license: MIT
+        repository: bloc97/Anime4K
+        ref: "4029bf701ecaa15f163cdc49cffe5501c1acf410"
+  model:                     # AI shader 必须声明；非 AI shader 省略
+    required: true
+    name: Anime4K v4 CNN models (weights embedded in GLSL)
+    author: bloc97
+    source_repository: bloc97/Anime4K
+    source_ref: "4029bf701ecaa15f163cdc49cffe5501c1acf410"
+    source_paths: [glsl]
+    license_spdx: MIT
+    license_path: LICENSE
 ```
 
-`build.resolve` 把 `ref` 解析成完整 commit，下载 `source` 并核对声明的 SHA-256；
-lock 只保存完整 commit、`raw.githubusercontent.com/<repo>/<commit>/<source>` 和
-哈希。`build.fetch` 再下载一次并校验，`build.assemble` 按 `target` 安装。
-仓库不保存 shader 文件本身。
+`ref`、`model.source_ref` 和许可证 `ref` 必须是完整 40 位 commit；`build.resolve`
+不会把分支名写进 lock。lock 保存完整 commit、文件 SHA-256 以及模型的
+`license_file`/`embedded_in`。`build.fetch` 再下载一次并校验，`build.assemble`
+按 `target` 安装。仓库不保存 shader 文件本身。
 
-`manifests/shaders.yml` 同时列出排除项：Ani4Kv2/AniSD 的模型权重是
-CC BY-NC 4.0，QCOM 的来源与许可证无法确认。
+模型许可证独立于代码许可证：`model.required: true` 时，`license_path` 必须指向
+该组件 `license.files` 中同 SPDX id 的许可证文本；`build.verify` 会检查它出现在
+包内 `licenses/<component>/` 且哈希与 `licenses/INDEX.json` 一致。
+
+### 跟随上游更新
+
+`update.mode` 决定月度工作流如何移动 pin：
+
+- `latest-commit`：`GET /repos/{repo}/commits?per_page=1`，版本写为提交日期。
+- `latest-tag`：`GET /repos/{repo}/releases/latest`，版本写为 tag。
+- `pinned`：不自动移动。GAN 旧分支、GPL release 资产和需要人工复核的组件使用。
+
+`python -m build.shader_update`（monthly workflow 的 resolve job 首先执行）只刷新
+已声明的文件：任何文件缺失、同仓库许可证文本变化或 `update.license_marker`
+消失都会失败并要求人工审计。刷新结果同时更新
+`manifests/shader-audit.json` 的 `upstream_commit`/`tls_sha256`，然后由
+`build.resolve`、双平台构建和 `build.verify` 再次校验。新增/删除 shader 文件
+仍需人工修改 manifest。
+
+排除项和完整审计见 [shader-license-audit.md](shader-license-audit.md) 与
+`manifests/shader-audit.json`：Ani4Kv2/AniSD 的模型权重是 CC BY-NC 4.0，
+AnimeJaNai 是 CC BY-NC-SA 4.0，k7/QCOM/ESPCN/LUT/Shadertoy 等无法证明完整
+许可证链，均不进入包。
 
 ## 哈希与 lock
 
@@ -151,10 +200,14 @@ application/octet-stream`，公开仓库和私有仓库都能工作。仓库公�
 
 1. 在对应 `manifests/*.yml` 增加组件：`upstream`、`release`、`asset.pattern`、
    `asset.version`、`license`、`extract`、`install`；shader 使用 `raw-files` 的
-   `ref`/`files` 结构。
-2. 确认资产在目标 Release 中唯一匹配；raw 文件填写实际 SHA-256。
+   `ref`/`files` 结构，并填写 `family`、`status`、`update`；AI shader 还要填写
+   `model`。
+2. 确认资产在目标 Release 中唯一匹配；raw 文件填写实际 SHA-256，许可证 ref 使用
+   完整 commit。同步把来源、模型许可证和处置写入 `manifests/shader-audit.json`
+   与 [shader-license-audit.md](shader-license-audit.md)。
 3. 运行 `python -m build.resolve --output sources.lock.json`。只更新部分组件时
-   使用 `--only <id>`（可重复），它会保留 lock 中其他组件的现有版本。
+   使用 `--only <id>`（可重复），它会保留 lock 中其他组件的现有版本；也可先运行
+   `python -m build.shader_update --check` 查看上游 pin 是否需要移动。
 4. 运行本地 fetch/assemble/smoke/package/verify，或直接跑 `Build` 工作流。
 5. 提交 manifest 与新的 lock。
 

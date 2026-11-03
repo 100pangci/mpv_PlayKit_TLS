@@ -22,18 +22,28 @@ fetched at build time and remain under their own upstream licenses:
   LXGW WenKai Mono Lite        OFL-1.1
   Material Icons               Apache-2.0
   yt-dlp                       Unlicense
-  Anime4K Restore / GAN        MIT
+  Anime4K v4 / GAN             MIT (code and embedded weights)
+  ACNet / ARNet                MIT (code and embedded weights)
+  ArtCNN                       MIT (code and ONNX weights)
+  CuNNy                        LGPL-3.0-or-later (code and pretrained weights)
+  AiUpscale                    GPL-3.0-only
+  NNEDI3 / RAVU                LGPL-3.0-or-later
+  CfL / Joint Bilateral        MIT
+  PixelClipper                 MIT
+  AN3223 denoise/deband/guided LGPL-2.1-or-later (per-file headers)
+  Adaptive sharpen lite        BSD-2-Clause (derived from bacondither HLSL)
   FSRCNNX                      LGPL-3.0-or-later (declared in the shader file)
-  NNEDI3                       LGPL-3.0-or-later
-  k7 modernAnime               MIT (declared in the shader file)
-  Adaptive sharpen lite        BSD-2-Clause (declared in the shader file)
   d3dcompiler_43.dll           Microsoft DirectX redistributable
 
 The GLSL shaders are data assets, not project code.  They are fetched at build
 time from the repositories and commits recorded in sources.lock.json,
 installed under portable_config/shaders/, and their license texts are included
-in licenses/.  Ani4Kv2/AniSD (CC BY-NC 4.0 model weights) and QCOM (unclear
-provenance) are deliberately excluded.
+in licenses/.  AI shader model weights are recorded separately from the code
+licence: each component names its weight source, pinned commit, embedded file
+hashes and model licence text.  Ani4Kv2/AniSD (CC BY-NC 4.0), AnimeJaNai
+(CC BY-NC-SA 4.0), k7/QCOM/ESPCN/LUT/Shadertoy (unproven chain) and unlicensed
+hooke007 derivative ports are deliberately excluded; see
+docs/shader-license-audit.md and manifests/shader-audit.json.
 
 The idle badge design in scripts/local/idle-brand.lua follows the mpv OSC idle
 logo from mpv's player/lua/osc.lua (mpv is GPL-2.0-or-later / LGPL-2.1-or-later).

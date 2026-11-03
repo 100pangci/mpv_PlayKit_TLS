@@ -74,22 +74,41 @@ license, recorded in `sources.lock.json`, `THIRD_PARTY.md`, and the package's
 `licenses/INDEX.json`. See `docs/lua-disposition.md` for the full mapping and
 `NOTICE` for the third-party boundary and corresponding-source information.
 
-## Selected shader additions (2026-11-01)
+## Shader re-audit (2026-11-03)
 
-Only shaders whose upstream source, pinned revision, and per-file license are
-clear are added, as build-time downloads rather than committed assets:
+The complete reference collection was re-audited file by file.  hooke007's
+PlayKit is treated only as a list of desired shaders, never as a license
+source.  Each included file is traced to the real upstream repository and a
+full commit; code and model/data licenses are recorded separately.  The
+machine-readable record is `manifests/shader-audit.json` and the readable
+summary is `docs/shader-license-audit.md`.
 
-- Anime4K Restore and GAN upscale from `bloc97/Anime4K` (MIT).
-- FSRCNNX from the `igv/FSRCNN-TensorFlow` 1.1 release; the shader declares
-  LGPL-3.0-or-later.
-- NNEDI3 from `bjin/mpv-prescalers`; the repository and hook declare
-  LGPL-3.0-or-later.
-- k7 modernAnime and Adaptive sharpen lite from `hooke007/mpv_PlayKit` at the
-  same pinned commit audited above; their in-file notices are MIT and
-  BSD-2-Clause respectively.
+Included as build-time downloads (13 components, 12 families, 191 targets):
 
-The Ani4Kv2/AniSD shaders remain excluded because their model weights are
-CC BY-NC 4.0. QCOM_SGEDS remains excluded because its code does not match the
-Snapdragon SGSR work named in its header and no separate copyright grant was
-found. `manifests/shaders.yml` records the exact source path and SHA-256 for
-every included file; `build.verify` rejects any other `.glsl` target.
+- Anime4K v4.0.1 and the last GAN-bearing upstream commit from
+  `bloc97/Anime4K`; repository MIT covers code and embedded weights.
+- ACNet/ARNet (`TianZerL/ACNetGLSL`, MIT) and ArtCNN (`Artoriuz/ArtCNN`, MIT),
+  including their in-repository ONNX/pickle weight provenance.
+- CuNNy non-dp4a shaders (`funnyplanter/CuNNy`, LGPL-3.0-or-later, SAFE with
+  notice); AiUpscale (`Alexkral/AviSynthAiUpscale`, GPL-3.0-only).
+- NNEDI3 and RAVU from `bjin/mpv-prescalers` (LGPL-3.0-or-later); CfL,
+  Joint/Fast Bilateral and PixelClipper from Artoriuz repositories (MIT).
+- AN3223 nlmeans/hdeband/guided (per-file LGPL-2.1-or-later).
+- Adaptive sharpen lite, a BSD-2-Clause derivative of bacondither's HLSL,
+  and FSRCNNX from the `igv/FSRCNN-TensorFlow` 1.1 release (shader declares
+  LGPL-3.0-or-later; repository LICENSE is MIT and is shipped as well).
+
+Still excluded: Ani4Kv2/AniSD (model weights CC BY-NC 4.0), AnimeJaNai
+(CC BY-NC-SA 4.0), k7 modernAnime and other ESRGAN conversions without a
+weight grant, QCOM SGEDS/SGSR conversions with an unverifiable source chain,
+ESPCN weights stored outside a licensed repository, LUTs and Shadertoy/
+Pastebin/Gist shaders without an explicit license, and hooke007 derivative
+ports whose original grant cannot be proven.  `manifests/shaders.yml` records
+the exact source path, commit and SHA-256 for every included file;
+`build.verify` rejects any other `.glsl` target.
+
+`manifests/shaders.yml` also declares `update.mode` per component.
+`python -m build.shader_update` follows upstream commits/tags in the monthly
+workflow, refuses license-text or license-marker changes, and updates both the
+manifest and audit pins; `build.resolve`, both platform builds and
+`build.verify` must still pass before anything reaches main.

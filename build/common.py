@@ -28,6 +28,29 @@ PLATFORM_ARCHIVE = {
     "linux-x64": "tar.gz",
 }
 
+SHADER_MANIFEST = "shaders.yml"
+SHADER_MANIFEST_SCHEMA = 2
+SHADER_STATUSES = frozenset({"SAFE", "SAFE_WITH_NOTICE"})
+SHADER_AUDIT_STATUSES = frozenset(
+    {
+        "SAFE",
+        "SAFE_WITH_NOTICE",
+        "NONCOMMERCIAL",
+        "NO_REDISTRIBUTION",
+        "UNKNOWN",
+        "CLEAN_ROOM_REIMPLEMENT_CANDIDATE",
+    }
+)
+UNSAFE_LICENSE_MARKERS = (
+    "noncommercial",
+    "-nc",
+    "noassertion",
+    "no-redistribution",
+    "no_redistribution",
+    "proprietary",
+    "unknown",
+)
+
 
 class BuildError(RuntimeError):
     """A build precondition or verification step failed."""
@@ -56,6 +79,135 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+def is_safe_license(expression: Any) -> bool:
+    """Reject license expressions that cannot be redistributed freely."""
+    folded = str(expression or "").strip().casefold()
+    if not folded:
+        return False
+    return not any(marker in folded for marker in UNSAFE_LICENSE_MARKERS)
+
+
+def validate_shader_component(identifier: str, component: dict[str, Any]) -> None:
+    """Validate shader-specific provenance before any network work.
+
+    Every shader component shipped by this repository is code plus, for AI
+    shaders, embedded model weights.  A code licence does not automatically
+    cover the weights, so the manifest must state both.  Only components whose
+    complete chain is known to permit redistribution belong in this manifest;
+    non-free and unknown entries live in manifests/shader-audit.json instead.
+    """
+    family = str(component.get("family") or "")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", family):
+        fail(f"{identifier}: shader component needs a lowercase family slug")
+    status = str(component.get("status") or "")
+    if status not in SHADER_STATUSES:
+        fail(
+            f"{identifier}: shader status {status!r} is not distributable; "
+            f"only {', '.join(sorted(SHADER_STATUSES))} may be listed"
+        )
+
+    license_info = component.get("license") or {}
+    spdx = str(license_info.get("spdx") or "")
+    if not is_safe_license(spdx):
+        fail(f"{identifier}: shader license {spdx!r} is not redistributable")
+    for part in license_info.get("parts") or []:
+        if not is_safe_license(part.get("license")):
+            fail(f"{identifier}: shader license part {part.get('license')!r} is not redistributable")
+    license_paths = set()
+    for item in license_info.get("files") or []:
+        if not is_safe_license(item.get("license")):
+            fail(
+                f"{identifier}: shader license file {item.get('path')} uses "
+                f"non-redistributable license {item.get('license')!r}"
+            )
+        license_paths.add(str(item.get("path")))
+
+    if component.get("kind") == "raw-files":
+        ref = str(component.get("ref") or "")
+        if not re.fullmatch(r"[0-9a-f]{40}", ref):
+            fail(
+                f"{identifier}: raw shader ref must be a full 40-character commit, "
+                f"not {ref!r}"
+            )
+
+    update = component.get("update")
+    if update is not None:
+        if not isinstance(update, dict):
+            fail(f"{identifier}: update must be a mapping")
+        mode = str(update.get("mode") or "pinned")
+        if mode not in {"pinned", "latest-commit", "latest-tag"}:
+            fail(f"{identifier}: unsupported update mode {mode!r}")
+        if mode != "pinned" and component.get("kind") != "raw-files":
+            fail(f"{identifier}: only raw-files components can follow upstream commits")
+        marker = update.get("license_marker")
+        if marker is not None and (not isinstance(marker, str) or not marker.strip()):
+            fail(f"{identifier}: update.license_marker must be a non-empty string")
+
+    model = component.get("model")
+    if model is not None:
+        if not isinstance(model, dict) or model.get("required") is not True:
+            fail(f"{identifier}: model provenance must be a mapping with required: true")
+        for field in (
+            "name",
+            "author",
+            "source_repository",
+            "source_ref",
+            "source_paths",
+            "license_spdx",
+            "license_path",
+        ):
+            if not model.get(field):
+                fail(f"{identifier}: model provenance is missing {field}")
+        source_repository = str(model["source_repository"])
+        if source_repository.count("/") != 1 or any(
+            part in ("", ".", "..") for part in source_repository.split("/")
+        ):
+            fail(f"{identifier}: model source_repository is invalid")
+        if not re.fullmatch(r"[0-9a-f]{40}", str(model["source_ref"])):
+            fail(f"{identifier}: model source_ref must be a full commit")
+        paths = model["source_paths"]
+        if not isinstance(paths, list) or not paths:
+            fail(f"{identifier}: model source_paths must be a non-empty list")
+        for value in paths:
+            path = Path(str(value))
+            if not value or path.is_absolute() or ".." in path.parts:
+                fail(f"{identifier}: model source path is unsafe: {value!r}")
+        if not is_safe_license(model["license_spdx"]):
+            fail(f"{identifier}: model license is not redistributable")
+        model_license_path = str(model["license_path"])
+        if model_license_path not in license_paths:
+            fail(
+                f"{identifier}: model license_path {model_license_path!r} "
+                "must be one of the component's license.files"
+            )
+        for item in license_info.get("files") or []:
+            if item.get("path") == model_license_path and item.get("license") != model.get("license_spdx"):
+                fail(
+                    f"{identifier}: model license_path {model_license_path!r} "
+                    "carries a different SPDX id than model.license_spdx"
+                )
+
+    derived = component.get("derived_from")
+    if derived is not None:
+        if not isinstance(derived, list) or not derived:
+            fail(f"{identifier}: derived_from must be a non-empty list")
+        for item in derived:
+            if not isinstance(item, dict):
+                fail(f"{identifier}: every derived_from entry must be a mapping")
+            repository = str(item.get("repository") or "")
+            if repository.count("/") != 1 or any(
+                part in ("", ".", "..") for part in repository.split("/")
+            ):
+                fail(f"{identifier}: derived_from repository is invalid")
+            if not re.fullmatch(r"[0-9a-f]{40}", str(item.get("commit") or "")):
+                fail(f"{identifier}: derived_from commit must be a full commit")
+            path = Path(str(item.get("path") or ""))
+            if not str(item.get("path")) or path.is_absolute() or ".." in path.parts:
+                fail(f"{identifier}: derived_from path is unsafe")
+            if not is_safe_license(item.get("license")):
+                fail(f"{identifier}: derived_from license is not redistributable")
+
+
 def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     project_path = manifest_dir / "project.yml"
     if not project_path.is_file():
@@ -68,6 +220,11 @@ def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], d
         if not path.is_file():
             fail(f"missing {path}")
         data = load_yaml(path)
+        if name == SHADER_MANIFEST and data.get("schema") != SHADER_MANIFEST_SCHEMA:
+            fail(
+                f"{path}: schema must be {SHADER_MANIFEST_SCHEMA} "
+                "(shader provenance and model licenses are required)"
+            )
         items = data.get("components")
         if not isinstance(items, list):
             fail(f"{path}: components must be a list")
@@ -83,6 +240,8 @@ def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], d
     for identifier, component in components.items():
         if not component.get("upstream"):
             fail(f"{identifier}: missing upstream")
+        if component.get("_manifest") == SHADER_MANIFEST:
+            validate_shader_component(identifier, component)
         kind = str(component.get("kind") or "binary")
         if kind == "raw-files":
             # Raw files are immutable blobs pinned by a repository commit.  The
@@ -227,6 +386,20 @@ def manifest_license_fields(license_info: dict[str, Any] | None) -> dict[str, An
     if "parts" in scoped:
         fields["license_parts"] = scoped["parts"]
     fields["license_files"] = license_files_summary(info.get("files"))
+    return fields
+
+
+def shader_manifest_fields(component: dict[str, Any] | None) -> dict[str, Any]:
+    """Shader provenance fields shared by package and release manifests."""
+    component = component or {}
+    fields: dict[str, Any] = {}
+    for key in ("family", "status", "model", "derived_from"):
+        value = component.get(key)
+        if value:
+            if key == "status":
+                fields["license_status"] = value
+            else:
+                fields[key] = value
     return fields
 
 

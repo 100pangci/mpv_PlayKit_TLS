@@ -1,147 +1,1145 @@
-schema: 1
+schema: 2
 # GLSL shaders are data assets: nothing here is committed to the repository.
 # build.resolve pins every raw file to a full upstream commit and a SHA-256;
 # build.fetch downloads it from raw.githubusercontent.com during CI, and
 # build.assemble installs it under portable_config/shaders/.
 #
-# Excluded on purpose:
-#   - Ani4Kv2 / AniSD: code MIT but the model weights are CC BY-NC 4.0, which
-#     is incompatible with a freely redistributable package.
-#   - QCOM_SGEDS: the file's embedded notice points at a Snapdragon SGSR
-#     license, but the code is not that work and its provenance is unclear.
-#   - VapourSynth (.vpy) and AI model files are outside this distribution.
+# Every component declares family, status, source commit and license.  AI
+# shaders additionally declare model provenance (`model.required: true` plus
+# the model licence text), because a code licence does not automatically cover
+# embedded weights.  Only SAFE and SAFE_WITH_NOTICE components may live here;
+# NONCOMMERCIAL, NO_REDISTRIBUTION, UNKNOWN and CLEAN_ROOM candidates are
+# recorded in manifests/shader-audit.json and must not enter a package.
+#
+# Excluded on purpose (see docs/shader-license-audit.md):
+#   - Ani4Kv2 / AniSD: code MIT but model weights are CC BY-NC 4.0.
+#   - AnimeJaNai (the_database) ESRGAN models: CC BY-NC-SA 4.0.
+#   - k7 modernAnime and other ESRGAN conversions: model-weight grant absent.
+#   - QCOM SGEDS / SGSR: third-party conversions whose source chain is unclear.
+#   - Shadertoy / Pastebin / gist-only shaders without an explicit licence.
+#   - Ports that exist only as unlicensed hooke007 derivatives.
 components:
-  - id: anime4k-restore
-    kind: raw-files
-    platforms: all
-    upstream: bloc97/Anime4K
-    ref: v4.0.1
-    version: v4.0.1
+- id: anime4k-v4
+  kind: raw-files
+  family: anime4k
+  status: SAFE
+  platforms: all
+  upstream: bloc97/Anime4K
+  ref: 4029bf701ecaa15f163cdc49cffe5501c1acf410
+  version: v4.0.1
+  update:
+    mode: latest-tag
+  model:
+    required: true
+    name: Anime4K v4 CNN models (weights embedded in GLSL)
+    author: bloc97
+    source_repository: bloc97/Anime4K
+    source_ref: 4029bf701ecaa15f163cdc49cffe5501c1acf410
+    source_paths:
+    - glsl
+    license_spdx: MIT
+    license_path: LICENSE
+  notes: Official Anime4K v4.0.1 GLSL. Model weights are embedded in the shader files; the repository LICENSE is MIT.
+  files:
+  - source: glsl/Deblur/Anime4K_Deblur_DoG.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Deblur_DoG.glsl
+    sha256: 480367048caca7520b6f66d4db731c96103677d0e5bad69d72adf46f58a59532
+    license: MIT
+  - source: glsl/Deblur/Anime4K_Deblur_Original.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Deblur_Original.glsl
+    sha256: 37e96b3225546ea4f2a6ec81cd6fac8f8f1774c62ba62b51ec5f93937d8f9f3d
+    license: MIT
+  - source: glsl/Denoise/Anime4K_Denoise_Bilateral_Mean.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Denoise_Bilateral_Mean.glsl
+    sha256: bdcbc73cecdbc2fda879824cad822c70cc89c9e93d747fa740c1301c3d270dee
+    license: MIT
+  - source: glsl/Denoise/Anime4K_Denoise_Bilateral_Median.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Denoise_Bilateral_Median.glsl
+    sha256: 5f9667ae9c2dbbcc460da5a12c5adfae72e7c72c595fa1cec13aa09cb5bd6f52
+    license: MIT
+  - source: glsl/Denoise/Anime4K_Denoise_Bilateral_Mode.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Denoise_Bilateral_Mode.glsl
+    sha256: 1f20a48ff19bf50181ee1ad608defbcb9e5ad3c0d8d6760fd8e1834c194efcb4
+    license: MIT
+  - source: glsl/Experimental-Effects/Anime4K_Darken_Fast.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Darken_Fast.glsl
+    sha256: d3adffc7249d6fb9c8474f5ac473f97e1d27501e130fd6d91425af6256be4a20
+    license: MIT
+  - source: glsl/Experimental-Effects/Anime4K_Darken_HQ.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Darken_HQ.glsl
+    sha256: 7506e41f3c2b031574897a74fc98a7fa478289747e6131b21d25fbc221460e13
+    license: MIT
+  - source: glsl/Experimental-Effects/Anime4K_Darken_VeryFast.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Darken_VeryFast.glsl
+    sha256: a6046bd461026c02d01028c7678b3eee2a74426277dfafcc31b95fa89910c7ca
+    license: MIT
+  - source: glsl/Experimental-Effects/Anime4K_Thin_Fast.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Thin_Fast.glsl
+    sha256: 6a77b7930b84b2fea7bdb4249f7fcdd1b8799803931c0c98f5994fd01f4390ff
+    license: MIT
+  - source: glsl/Experimental-Effects/Anime4K_Thin_HQ.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Thin_HQ.glsl
+    sha256: 026e245fb49b1d7ab549043d75fcfe9c1b6a5e3170323861fa9abfdbad5abe61
+    license: MIT
+  - source: glsl/Experimental-Effects/Anime4K_Thin_VeryFast.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Thin_VeryFast.glsl
+    sha256: c7b82480644a1b71b0f519186c58ecffc8cbb629fd87ab952f7e2665a58f810c
+    license: MIT
+  - source: glsl/Restore/Anime4K_Clamp_Highlights.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Clamp_Highlights.glsl
+    sha256: a2a9bf7fbc1d75d09660ca2e701e4d7fb0cf5457b94da47e1825032fa2b3671a
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_CNN_L.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_L.glsl
+    sha256: d6efe215e6ee8af1ec560478a91afc1df83fac4ba43b2c806ee61ca2267ed674
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_CNN_M.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_M.glsl
+    sha256: 67ea3ed26539e8de3b7d307688535d2ff17e8d147e11dda0247da7770dbecf41
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_CNN_S.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_S.glsl
+    sha256: 97c24dc370ab300c108bfaa09db7f175aeff343674842c299cf3940a3d330427
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_CNN_Soft_L.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_Soft_L.glsl
+    sha256: 8f2a5c73b526c6e4c67bce0366f7dcd7410bfa4a31e718240d86f53660788e63
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_CNN_Soft_M.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_Soft_M.glsl
+    sha256: a78a2c76898e08e09e442a9628c64208c26e8e15789649b8755223f009794c02
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_CNN_Soft_S.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_Soft_S.glsl
+    sha256: 9f6867f2ef42786729522d86fe24147cb4ea145418e3974df70496acf52dc392
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_CNN_Soft_UL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_Soft_UL.glsl
+    sha256: 41d71cad7b2f3af9086852fca70046f763272d2cb49dd83de9647d942866cac8
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_CNN_Soft_VL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_Soft_VL.glsl
+    sha256: 094334b0e20c1a201fe4941c7c68de72451e5aee9efb5524d7fb82b12dca64b9
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_CNN_UL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_UL.glsl
+    sha256: 81ec48ff700108c8e1571ed82d4527006ee200c05e94f8b7f836c02179169b40
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_CNN_VL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_VL.glsl
+    sha256: 35036722733305cd4d4e57660b883bbe2569ba2914033c254327107d7b77e35e
+    license: MIT
+  - source: glsl/Upscale/Anime4K_AutoDownscalePre_x2.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_AutoDownscalePre_x2.glsl
+    sha256: 8c58291740146bd766a4d73f132775a797fe80f7d07919b5d767e27a5dc85656
+    license: MIT
+  - source: glsl/Upscale/Anime4K_AutoDownscalePre_x4.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_AutoDownscalePre_x4.glsl
+    sha256: 5af62d8cd844916dc1126613e13bad3beab195787f93a71200b47c6ec78f2e41
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_CNN_x2_L.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_CNN_x2_L.glsl
+    sha256: db1fedf7be82f6fd9034e6bf39b64daf2b7576988bb584ec38f24f5236b1cd97
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_CNN_x2_M.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_CNN_x2_M.glsl
+    sha256: 716e02098a68f0d648761f2b96b4dd139e1cb09b174bb369fca3aa34328fff7e
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_CNN_x2_S.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_CNN_x2_S.glsl
+    sha256: 4c53ec2e287908f7ee7bcb266b0170421626d663576468b7d7dafc62962649a4
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_CNN_x2_UL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_CNN_x2_UL.glsl
+    sha256: fa7cf0ecc1cca84d8291bbff5a42b60f5816d57b4e97d42bc377235ac8db02e8
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_CNN_x2_VL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_CNN_x2_VL.glsl
+    sha256: 5638fe31c37c151a3443fea3451a3ef91af073f4dbb9615f6c0d1e29db11493d
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_DTD_x2.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_DTD_x2.glsl
+    sha256: b6597cace43fc9a6be57a8eebc540fe20caa8389fae0aad1157a9c15fc410ef3
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_Deblur_DoG_x2.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_Deblur_DoG_x2.glsl
+    sha256: 2408b7d334803bae2e463f75d4e293146715609ed576dddfd22e2a76189eb161
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_Deblur_Original_x2.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_Deblur_Original_x2.glsl
+    sha256: 4a88f9a4437aa5cca1e2055a45db533b58cf9c955763fb64cf38033f0f63904f
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_DoG_x2.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_DoG_x2.glsl
+    sha256: 33dbf76d855575b7a99885885c2c7c692444cf776f22048b4a611dab178e66e3
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_Original_x2.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_Original_x2.glsl
+    sha256: ffb1a4a28c5ce80a3e932e9454917ea48a4ba31dadcf274714048693ce387919
+    license: MIT
+  - source: glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_L.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_Denoise_CNN_x2_L.glsl
+    sha256: 6cc4604c9544fd4fd9e3a75fd797511bf5fe1e626e9e1dbcee03302823a63207
+    license: MIT
+  - source: glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_M.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_Denoise_CNN_x2_M.glsl
+    sha256: 8c72b042e2301fe66a45c3089720459148e2504cd72af16f9c0d5017ff14181e
+    license: MIT
+  - source: glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_S.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_Denoise_CNN_x2_S.glsl
+    sha256: 1a45ad3aa20d8368399f2fd46791deed957c2fd0a4afd131cc92516827abab93
+    license: MIT
+  - source: glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_UL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_Denoise_CNN_x2_UL.glsl
+    sha256: 38bd11e7e92ff1a615a274be912d6f2cfe67f5b43771f0383a91c6ab3d0f8cb6
+    license: MIT
+  - source: glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl
+    sha256: 359c48fe5a317fbc6b706ce368401eef496e84ed98abac7a43efebca2b65d79b
+    license: MIT
+  license:
+    spdx: MIT
     files:
-      - source: glsl/Restore/Anime4K_Restore_CNN_L.glsl
-        target: portable_config/shaders/Anime4K/Anime4K_Restore_CNN_L.glsl
-        sha256: d6efe215e6ee8af1ec560478a91afc1df83fac4ba43b2c806ee61ca2267ed674
-        license: MIT
-    license:
-      spdx: MIT
-      files:
-        - path: LICENSE
-          license: MIT
-          repository: bloc97/Anime4K
-          ref: v4.0.1
-          source_path: LICENSE
-
-  - id: anime4k-upscale-gan
-    kind: raw-files
-    platforms: all
-    upstream: bloc97/Anime4K
-    # v4.0.1 removed the GAN upscalers; this immutable commit is the last
-    # upstream revision that still contains Anime4K_Upscale_GAN_x2_M.glsl.
-    ref: 8e39551ce96ed172605c89b7dd8be855b5502cc9
-    version: v4.0-GAN-8e39551
+    - path: LICENSE
+      license: MIT
+      repository: bloc97/Anime4K
+      ref: 4029bf701ecaa15f163cdc49cffe5501c1acf410
+      source_path: LICENSE
+- id: anime4k-gan
+  kind: raw-files
+  family: anime4k
+  status: SAFE
+  platforms: all
+  upstream: bloc97/Anime4K
+  ref: 8e39551ce96ed172605c89b7dd8be855b5502cc9
+  version: v4.0-GAN-8e39551
+  update:
+    mode: pinned
+  model:
+    required: true
+    name: Anime4K GAN models (weights embedded in GLSL)
+    author: bloc97
+    source_repository: bloc97/Anime4K
+    source_ref: 8e39551ce96ed172605c89b7dd8be855b5502cc9
+    source_paths:
+    - glsl
+    license_spdx: MIT
+    license_path: LICENSE
+  notes: Official GAN shaders from the last upstream commit that still ships them. Weights are embedded and covered by the MIT repository license.
+  files:
+  - source: glsl/Restore/Anime4K_Restore_GAN_UL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_GAN_UL.glsl
+    sha256: d7a2146b9b1b5a7cfbe3ee0cf9437fbb0761eb999d4b0f284d3489e0a0ff1002
+    license: MIT
+  - source: glsl/Restore/Anime4K_Restore_GAN_UUL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Restore_GAN_UUL.glsl
+    sha256: b0f36492734277f4c7cf180047ca827d0af89dafed231aa0ee3d6ca3593d4cc9
+    license: MIT
+  - source: glsl/Upscale/Anime4K_3DGraphics_AA_Upscale_x2_US.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_3DGraphics_AA_Upscale_x2_US.glsl
+    sha256: e2de24efdb7dc75e1f48d3fd62c50d24a434b129857237c8d3bd24eba1665d75
+    license: MIT
+  - source: glsl/Upscale/Anime4K_3DGraphics_Upscale_x2_US.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_3DGraphics_Upscale_x2_US.glsl
+    sha256: ccfd16fa65908fbafe27114cf65ddc043bc746d4086716c2a85e97a283d9fe5e
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_GAN_x2_M.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x2_M.glsl
+    sha256: 8a1d33fddc8939c1e0eb4d6ad6a7baf653dd420d6b713e385b7c73be90d9affe
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_GAN_x2_S.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x2_S.glsl
+    sha256: ec252b694675ce8e3b3959bd53530a9e94e360ce8a7de95be9a848ac0826649f
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_GAN_x3_L.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x3_L.glsl
+    sha256: fecde271daf90df63d03f9999da57080b268d085cce1b60c0fbfe4589688da21
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_GAN_x3_VL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x3_VL.glsl
+    sha256: 66d201713e43c74fdfb75cde9732d1b42f3eb30ecdda68f2a6a5caf647c1f76a
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_GAN_x4_UL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x4_UL.glsl
+    sha256: b1ed2bb1065f84e2cb986d7c5022dc0a926814f37891e6a88b69c9e79c120ae0
+    license: MIT
+  - source: glsl/Upscale/Anime4K_Upscale_GAN_x4_UUL.glsl
+    target: portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x4_UUL.glsl
+    sha256: f4740658e3b8a15f3eb2e34d73a7b05d130bb2af11f3e71685636e4809e917ee
+    license: MIT
+  license:
+    spdx: MIT
     files:
-      - source: glsl/Upscale/Anime4K_Upscale_GAN_x2_M.glsl
-        target: portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x2_M.glsl
-        sha256: 8a1d33fddc8939c1e0eb4d6ad6a7baf653dd420d6b713e385b7c73be90d9affe
-        license: MIT
-    license:
-      spdx: MIT
-      files:
-        - path: LICENSE
-          license: MIT
-          repository: bloc97/Anime4K
-          ref: 8e39551ce96ed172605c89b7dd8be855b5502cc9
-          source_path: LICENSE
-
-  - id: k7-modernanime
-    kind: raw-files
-    platforms: all
-    upstream: hooke007/mpv_PlayKit
-    # The shader files carry an in-file MIT notice with hooke007's copyright.
-    ref: 4921c6796620a13c2c03266f368d59d354a67b72
-    version: "2026-05-30"
+    - path: LICENSE
+      license: MIT
+      repository: bloc97/Anime4K
+      ref: 8e39551ce96ed172605c89b7dd8be855b5502cc9
+      source_path: LICENSE
+- id: acnet
+  kind: raw-files
+  family: acnet
+  status: SAFE
+  platforms: all
+  upstream: TianZerL/ACNetGLSL
+  ref: c7d2d8dbb5364c550e5bfb738860fc9bcc0ea424
+  version: '2026-05-11'
+  update:
+    mode: latest-commit
+  model:
+    required: true
+    name: ACNet / ARNet trained weights (embedded in GLSL)
+    author: TianZer
+    source_repository: TianZerL/ACNetGLSL
+    source_ref: c7d2d8dbb5364c550e5bfb738860fc9bcc0ea424
+    source_paths:
+    - glsl
+    license_spdx: MIT
+    license_path: LICENSE
+  notes: Official ACNetGLSL generated shaders. Training code is TianZerL/RealTimeAnimeSISR, also MIT; both repositories carry the same MIT grant for code and generated weights.
+  files:
+  - source: glsl/acnet/acnet_f8b18.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b18.glsl
+    sha256: 1f7355825554367054daa4ecc4c6770f6acdae6a45fa9688df7b20aad3144555
+    license: MIT
+  - source: glsl/acnet/acnet_f8b18_box.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b18_box.glsl
+    sha256: f167351509038d44b9b1fd05c4304162954e97f6aa2a01c3ee4017906ee069d1
+    license: MIT
+  - source: glsl/acnet/acnet_f8b18_box_hdn.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b18_box_hdn.glsl
+    sha256: 7f1376025c14f68dc7425d1696eb298449999ed3661c7e517bfe5fff0dc31791
+    license: MIT
+  - source: glsl/acnet/acnet_f8b18_hdn.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b18_hdn.glsl
+    sha256: 86eb7bdcc2afda82a0e875f8d33f712cb8981c3635c41cb20b7fb2d367ef5141
+    license: MIT
+  - source: glsl/acnet/acnet_f8b4.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b4.glsl
+    sha256: cd7bd35d2f124f9697b2a1bc82586a395f5f91fba2cedc57a1845853c9af8714
+    license: MIT
+  - source: glsl/acnet/acnet_f8b4_box.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b4_box.glsl
+    sha256: 1d0137d78e9100c22223aacf9c11ccf977852a9a14d0f3b9e4e2e99df94a8940
+    license: MIT
+  - source: glsl/acnet/acnet_f8b4_box_hdn.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b4_box_hdn.glsl
+    sha256: 043fcba597f29ddc6e34805c345890a370af5f2e4933ea082534611bfa0eb999
+    license: MIT
+  - source: glsl/acnet/acnet_f8b4_hdn.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b4_hdn.glsl
+    sha256: 2765eb42d0e221ada563b07977497417d1c4474ccf38b913aa62b6bdd9468058
+    license: MIT
+  - source: glsl/acnet/acnet_f8b8.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b8.glsl
+    sha256: 619ec147e5d679d806567af1f783f77f22b60066ea866cbab731c94ff1a2c885
+    license: MIT
+  - source: glsl/acnet/acnet_f8b8_box.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b8_box.glsl
+    sha256: e695c84c529bfc3b2e63e18c110bf9f44084900fd38b54fcdf8900cb1dfffe6e
+    license: MIT
+  - source: glsl/acnet/acnet_f8b8_box_hdn.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b8_box_hdn.glsl
+    sha256: 574ad489ae22fee6c822e668cc73ca45676329506f285e199c6955e9bd960413
+    license: MIT
+  - source: glsl/acnet/acnet_f8b8_hdn.glsl
+    target: portable_config/shaders/ACNet/acnet_f8b8_hdn.glsl
+    sha256: d37ca3fe5144be9900d19263c398875812c59e6398904493a6cdf63245e2690e
+    license: MIT
+  - source: glsl/acnet-legacy/acnet_legacy_gan.glsl
+    target: portable_config/shaders/ACNet/acnet_legacy_gan.glsl
+    sha256: 8f191dc4d36c66ec908c0fa174675704efa84750e92cc3e0c34b693ee7c5ce37
+    license: MIT
+  - source: glsl/acnet-legacy/acnet_legacy_hdn0.glsl
+    target: portable_config/shaders/ACNet/acnet_legacy_hdn0.glsl
+    sha256: ef1f66e89657b2a60e96f23266cbe465ab028adbbe7bd90a8115bb6fdf4be472
+    license: MIT
+  - source: glsl/acnet-legacy/acnet_legacy_hdn1.glsl
+    target: portable_config/shaders/ACNet/acnet_legacy_hdn1.glsl
+    sha256: 7359d0f988afe3ddc9239470cd3b7dcaefcc891cda8b74afcf4508fe149fa183
+    license: MIT
+  - source: glsl/acnet-legacy/acnet_legacy_hdn2.glsl
+    target: portable_config/shaders/ACNet/acnet_legacy_hdn2.glsl
+    sha256: 212f09a2c632935408c9cbd94b5ca17f8071d838f8600522273c1011dd6712dd
+    license: MIT
+  - source: glsl/acnet-legacy/acnet_legacy_hdn3.glsl
+    target: portable_config/shaders/ACNet/acnet_legacy_hdn3.glsl
+    sha256: 83d80d0c486a794c8bab22ebad567e52e98d59506dea1173c1775f0201ad431e
+    license: MIT
+  - source: glsl/arnet/arnet_f8b16.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b16.glsl
+    sha256: 09917c27389b5d4a3428e3bfc759049db59ec17597bd5a8edfd1c667a7a7b532
+    license: MIT
+  - source: glsl/arnet/arnet_f8b16_box.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b16_box.glsl
+    sha256: bb496bd7d6121757a0cc68af3abe8a8f543703b2ff70a9a44ce655f94a1b9ca7
+    license: MIT
+  - source: glsl/arnet/arnet_f8b16_box_hdn.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b16_box_hdn.glsl
+    sha256: 2c530e8132335b1a1da6f9f9a9942085af5e6f5d02234d90181f88139a982ac5
+    license: MIT
+  - source: glsl/arnet/arnet_f8b16_hdn.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b16_hdn.glsl
+    sha256: 8659f37ff5877f0e7d084301997850b03bad472c7a615fe0f0e21967e7dd7012
+    license: MIT
+  - source: glsl/arnet/arnet_f8b32.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b32.glsl
+    sha256: 00b0e164677147915bd93557a42bc0e81ecdde9606565d5350763fd193b1046d
+    license: MIT
+  - source: glsl/arnet/arnet_f8b32_box.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b32_box.glsl
+    sha256: 4cf5a30bfae0427e4fe5f0bc5511b133118283eb95c1721425659d57127fce6b
+    license: MIT
+  - source: glsl/arnet/arnet_f8b32_box_hdn.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b32_box_hdn.glsl
+    sha256: d554085759f56272e510a570b379c2a85677bad4675f2ae1ec01661b7b519de5
+    license: MIT
+  - source: glsl/arnet/arnet_f8b32_hdn.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b32_hdn.glsl
+    sha256: e6125775f878f70a038c57e7ac63a85f4bf28c157d355db57514fcc46903fd6a
+    license: MIT
+  - source: glsl/arnet/arnet_f8b64.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b64.glsl
+    sha256: de1d50dddc1351e749f86254c8959078fcacf266fb13dbd8d83c66c3d2b0afea
+    license: MIT
+  - source: glsl/arnet/arnet_f8b64_box.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b64_box.glsl
+    sha256: bb77d350e01584030988e5d96083d9dbe840443955c8428c8f80f58b8da02b6e
+    license: MIT
+  - source: glsl/arnet/arnet_f8b64_box_hdn.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b64_box_hdn.glsl
+    sha256: 98f860aa54780af70a5891e896ed9bcfd140c5843136db600da3d8436fcd7b83
+    license: MIT
+  - source: glsl/arnet/arnet_f8b64_hdn.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b64_hdn.glsl
+    sha256: b042892a291f518d223597e674b9c062db1f6df2034bd39d13875eb06596d0c0
+    license: MIT
+  - source: glsl/arnet/arnet_f8b8.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b8.glsl
+    sha256: c36374511bb5b14dc08824a41ce271a1e2a9cb50085f98814c7f83c541fda90c
+    license: MIT
+  - source: glsl/arnet/arnet_f8b8_box.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b8_box.glsl
+    sha256: 588779d52311ae164ab743b79cfd05cef181f8e85b017ddcfd7d507c6e3a9082
+    license: MIT
+  - source: glsl/arnet/arnet_f8b8_box_hdn.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b8_box_hdn.glsl
+    sha256: 8f672e8aca3e1a1065631f26c6409f51cf94c033b1f4d10b1a4bbb28fcece08c
+    license: MIT
+  - source: glsl/arnet/arnet_f8b8_hdn.glsl
+    target: portable_config/shaders/ACNet/arnet_f8b8_hdn.glsl
+    sha256: b88b47c7b554e0106c3531f5cce491bc14161735d45463de2ace896243eeac8a
+    license: MIT
+  license:
+    spdx: MIT
     files:
-      - source: portable_config/shaders/ESRGAN/k7_modernAnime_FHD_x2.glsl
-        target: portable_config/shaders/ESRGAN/k7_modernAnime_FHD_x2.glsl
-        sha256: 8a18e739a2129982e5f1a8cdf7a33c55fd9d27067bfcdf974bc2941d60abe377
-        license: MIT
-      - source: portable_config/shaders/ESRGAN/k7_modernAnime_DT_FHD_x2.glsl
-        target: portable_config/shaders/ESRGAN/k7_modernAnime_DT_FHD_x2.glsl
-        sha256: d4243814980e875fd246fab2f0420b93de0dcbc086c87ea1f810d0df79813837
-        license: MIT
-    license:
-      spdx: MIT
-      files:
-        - path: MIT.txt
-          license: MIT
-          repository: spdx/license-list-data
-          ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
-          source_path: text/MIT.txt
-
-  - id: adaptive-sharpen-lite
-    kind: raw-files
-    platforms: all
-    upstream: hooke007/mpv_PlayKit
-    # GLSL adaptation of bacondither's adaptive-sharpen; the file embeds the
-    # full BSD-2-Clause notice and copyright.
-    ref: 4921c6796620a13c2c03266f368d59d354a67b72
-    version: "2026-05-30"
+    - path: LICENSE
+      license: MIT
+      repository: TianZerL/ACNetGLSL
+      ref: c7d2d8dbb5364c550e5bfb738860fc9bcc0ea424
+      source_path: LICENSE
+- id: artcnn
+  kind: raw-files
+  family: artcnn
+  status: SAFE
+  platforms: all
+  upstream: Artoriuz/ArtCNN
+  ref: 0837e5326e710f49e2ab0a8d995da0708047442e
+  version: '2026-10-22'
+  update:
+    mode: latest-commit
+  model:
+    required: true
+    name: ArtCNN C4F16 / C4F32 ONNX weights
+    author: João Chrisóstomo
+    source_repository: Artoriuz/ArtCNN
+    source_ref: 0837e5326e710f49e2ab0a8d995da0708047442e
+    source_paths:
+    - ONNX
+    license_spdx: MIT
+    license_path: LICENSE
+  notes: Official GLSL generated by the model author; the ONNX weights, training code and GLSL are all in the same MIT repository.
+  files:
+  - source: GLSL/ArtCNN_C4F16.glsl
+    target: portable_config/shaders/ArtCNN/ArtCNN_C4F16.glsl
+    sha256: 03d0b3d31cb82c898a94a46663021a3e8f02c5a21d69c5cfdf0208de4bfd453e
+    license: MIT
+  - source: GLSL/ArtCNN_C4F16_DN.glsl
+    target: portable_config/shaders/ArtCNN/ArtCNN_C4F16_DN.glsl
+    sha256: 047f33cd43ca3751b00c7c81206e076ac921c1fbc06d49f23010a0b428271acf
+    license: MIT
+  - source: GLSL/ArtCNN_C4F16_DS.glsl
+    target: portable_config/shaders/ArtCNN/ArtCNN_C4F16_DS.glsl
+    sha256: 57df650fddec3969e17799f5522c9b03dd2d33b1aeace237fef216bf3858125a
+    license: MIT
+  - source: GLSL/ArtCNN_C4F32.glsl
+    target: portable_config/shaders/ArtCNN/ArtCNN_C4F32.glsl
+    sha256: f773bce6cf5fe7e5e5d599a695edd40df5cd7a20c3d08c4d164d07591d5bead3
+    license: MIT
+  - source: GLSL/ArtCNN_C4F32_DN.glsl
+    target: portable_config/shaders/ArtCNN/ArtCNN_C4F32_DN.glsl
+    sha256: 6b51a6f7d75826c9492c3f78b5e60acffa24a71928e2d47c4a329423922a143c
+    license: MIT
+  - source: GLSL/ArtCNN_C4F32_DS.glsl
+    target: portable_config/shaders/ArtCNN/ArtCNN_C4F32_DS.glsl
+    sha256: a04c9cba6fbb8e6db9239d61848390208aedf8e348ef116e12174c803d22077e
+    license: MIT
+  license:
+    spdx: MIT
     files:
-      - source: portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_RT.glsl
-        target: portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_RT.glsl
-        sha256: 2b94d5dfe14c614e9e9f1aaf4a9fe994b5aa78a5c8c9b5d5706bee6409b09a17
-        license: BSD-2-Clause
-    license:
-      spdx: BSD-2-Clause
-      files:
-        - path: BSD-2-Clause.txt
-          license: BSD-2-Clause
-          repository: spdx/license-list-data
-          ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
-          source_path: text/BSD-2-Clause.txt
-
-  - id: nnedi3
-    kind: raw-files
-    platforms: all
-    upstream: bjin/mpv-prescalers
-    # Upstream publishes this shader as a .hook file; mpv does not require a
-    # particular extension, so it is installed with the conventional .glsl name.
-    ref: b3f0a59d68f33b7162051ea5970a5169558f0ea2
-    version: "2024-01-11"
+    - path: LICENSE
+      license: MIT
+      repository: Artoriuz/ArtCNN
+      ref: 0837e5326e710f49e2ab0a8d995da0708047442e
+      source_path: LICENSE
+- id: cunny
+  kind: raw-files
+  family: cunny
+  status: SAFE_WITH_NOTICE
+  platforms: all
+  upstream: funnyplanter/CuNNy
+  ref: 906031bb00c15dd6a6bbbaa21c0eb0b724ca8437
+  version: '2025-08-29'
+  update:
+    mode: latest-commit
+  model:
+    required: true
+    name: CuNNy pretrained pickle weights
+    author: funnyplanter
+    source_repository: funnyplanter/CuNNy
+    source_ref: 906031bb00c15dd6a6bbbaa21c0eb0b724ca8437
+    source_paths:
+    - pretrained
+    license_spdx: LGPL-3.0-or-later
+    license_path: LICENSE
+  notes: Official mpv shaders generated by the model author from the in-repo pickles. The dp4a variants are omitted because they require GL_EXT_shader_explicit_arithmetic_types_int8; they are still LGPL
+    and can be added later.
+  files:
+  - source: mpv/soft/CuNNy-2x12-SOFT.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-2x12-SOFT.glsl
+    sha256: 74581cfcfd30ce03d224f39c50aa71519f1752e37fcd9445d8ffd609cc4d2b8d
+    license: LGPL-3.0-or-later
+  - source: mpv/soft/CuNNy-3x12-SOFT.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-3x12-SOFT.glsl
+    sha256: 09e956d75212ca58a31f7379edd09da18491490f82a7e68d032c21f6dac0ad1e
+    license: LGPL-3.0-or-later
+  - source: mpv/soft/CuNNy-4x12-SOFT.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-4x12-SOFT.glsl
+    sha256: d9ff715f59f0679cdf0d811dfb1f8481e296b7943a0d742eaf56fe7403b10f0f
+    license: LGPL-3.0-or-later
+  - source: mpv/soft/CuNNy-4x16-SOFT.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-4x16-SOFT.glsl
+    sha256: 902fcac5db6e0577bc80fadd52497221b05c9054e316d6bf4427019c7d4ab1f4
+    license: LGPL-3.0-or-later
+  - source: mpv/soft/CuNNy-4x24-SOFT.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-4x24-SOFT.glsl
+    sha256: c27747efc8f7bf2e72220dd1f1aed2e0f6644a296c395cd96c80323673f3adf9
+    license: LGPL-3.0-or-later
+  - source: mpv/soft/CuNNy-4x32-SOFT.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-4x32-SOFT.glsl
+    sha256: 19b9d5bcbf8c2428b256c15f1f01ed853b19d57752893b48b2f6ab22004fdbb8
+    license: LGPL-3.0-or-later
+  - source: mpv/soft/CuNNy-fast-SOFT.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-fast-SOFT.glsl
+    sha256: 7f5077ebe18ac599f088e8d8c0401a195132bcc1b078c9f3bb2f1baf16a92c8c
+    license: LGPL-3.0-or-later
+  - source: mpv/soft/CuNNy-faster-SOFT.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-faster-SOFT.glsl
+    sha256: 6166d08af2fb256e7d3510ede1a427c23e0580055ada4d9c835ae8bced3f9613
+    license: LGPL-3.0-or-later
+  - source: mpv/soft/CuNNy-veryfast-SOFT.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-veryfast-SOFT.glsl
+    sha256: 9c63e86ef43322c31b6def499e937d79edd0d8311fc318b76769d14235ccac63
+    license: LGPL-3.0-or-later
+  - source: mpv/ds/CuNNy-2x12-DS.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-2x12-DS.glsl
+    sha256: a04ef20c7cf3ccb0b69f0629586146cabf8af695247b1b9e0b4e7281d6045ff6
+    license: LGPL-3.0-or-later
+  - source: mpv/ds/CuNNy-3x12-DS.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-3x12-DS.glsl
+    sha256: ef2db370d5fb8ccca7d423e76e3e3cc97c036508cefa300f83833748f96a4c6b
+    license: LGPL-3.0-or-later
+  - source: mpv/ds/CuNNy-4x12-DS.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-4x12-DS.glsl
+    sha256: eb8bac2b9229706cea27cd54d66c9f9f8d40fd37773a7fc9a4f27ee4f8faacff
+    license: LGPL-3.0-or-later
+  - source: mpv/ds/CuNNy-4x16-DS.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-4x16-DS.glsl
+    sha256: 2e9dba9e7915d7d8b35db4a08d63a64ff1406f3e975d377f2b6f90e37bb187f4
+    license: LGPL-3.0-or-later
+  - source: mpv/ds/CuNNy-4x24-DS.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-4x24-DS.glsl
+    sha256: 477c026baee0f52cf3a222d564f5501623d5d192e1a64a9277431fe5dd277d84
+    license: LGPL-3.0-or-later
+  - source: mpv/ds/CuNNy-4x32-DS.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-4x32-DS.glsl
+    sha256: de2cd034d3c9bab1f3fe340eb6220ce7de7d1b0615f330181ad00288f3fe1a3d
+    license: LGPL-3.0-or-later
+  - source: mpv/ds/CuNNy-8x32-DS.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-8x32-DS.glsl
+    sha256: 87e79777b7b1ed347f1ca6bc9ab798c5b999bc827d09b2877c5ed5a783a90c66
+    license: LGPL-3.0-or-later
+  - source: mpv/ds/CuNNy-fast-DS.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-fast-DS.glsl
+    sha256: 86681e39ef4a2f22ad5622be88c2bff179007f4f9b898e05638d6ab1239e03c0
+    license: LGPL-3.0-or-later
+  - source: mpv/ds/CuNNy-faster-DS.glsl
+    target: portable_config/shaders/CuNNy/CuNNy-faster-DS.glsl
+    sha256: bdb1fc5718aec6414e2cf94a596c10c8e664a6bac9f37be238a8e212045debd5
+    license: LGPL-3.0-or-later
+  license:
+    spdx: LGPL-3.0-or-later
     files:
-      - source: nnedi3-nns64-win8x4.hook
-        target: portable_config/shaders/EDI/nnedi3_nns64_win8x4.glsl
-        sha256: ad6b260942aef9489a389ae19ba8067930e8d26c63a82fb6e23901f570da9329
-        license: LGPL-3.0-or-later
-    license:
-      spdx: LGPL-3.0-or-later
-      files:
-        - path: LGPL-3.0-or-later.txt
-          license: LGPL-3.0-or-later
-          repository: spdx/license-list-data
-          ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
-          source_path: text/LGPL-3.0-or-later.txt
-
-  - id: fsrcnnx
-    kind: file
-    platforms: all
-    upstream: igv/FSRCNN-TensorFlow
-    release:
-      mode: tag
-      tag: "1.1"
-    asset:
-      pattern: '^FSRCNNX_x2_16-0-4-1\.glsl$'
-      version: '{release_tag}'
-    license:
-      # The shader file itself declares LGPL-3.0-or-later; the repository
-      # license is GPL-3.0.  Ship the canonical LGPL text named by the file.
-      spdx: LGPL-3.0-or-later
-      files:
-        - path: LGPL-3.0-or-later.txt
-          license: LGPL-3.0-or-later
-          repository: spdx/license-list-data
-          ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
-          source_path: text/LGPL-3.0-or-later.txt
-    install:
-      - source: FSRCNNX_x2_16-0-4-1.glsl
-        target: portable_config/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl
+    - path: LICENSE
+      license: LGPL-3.0-or-later
+      repository: funnyplanter/CuNNy
+      ref: 906031bb00c15dd6a6bbbaa21c0eb0b724ca8437
+      source_path: LICENSE
+- id: aiupscale
+  kind: raw-files
+  family: aiupscale
+  status: SAFE_WITH_NOTICE
+  platforms: all
+  upstream: Alexkral/AviSynthAiUpscale
+  ref: d04cf8154e4ba9914f3ead0dec9f7a4a7df7369f
+  version: '2021-03-28'
+  update:
+    mode: latest-commit
+  model:
+    required: true
+    name: AiUpscale Fast/Medium/HQ models
+    author: Alexkral
+    source_repository: Alexkral/AviSynthAiUpscale
+    source_ref: d04cf8154e4ba9914f3ead0dec9f7a4a7df7369f
+    source_paths:
+    - Shaders
+    license_spdx: GPL-3.0-only
+    license_path: LICENSE
+  notes: Official mpv user shaders and the corresponding HLSL/CSO model artefacts are in the same GPL-3.0 repository. The shader files are the complete preferred source for the embedded weights.
+  files:
+  - source: mpv user shaders/LineArt/2x/AiUpscale_Fast_2x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/2x/AiUpscale_Fast_2x_LineArt.glsl
+    sha256: ff05f44f00d775fab5a5007cb9205461e0e98cadf1970cd37a11d99659903fbe
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/2x/AiUpscale_Fast_Sharp_2x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/2x/AiUpscale_Fast_Sharp_2x_LineArt.glsl
+    sha256: 6a6f10a27f757a83c513b384711f1602eeef1245c63001c7a6b43c5fb97a4223
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/2x/AiUpscale_HQ_2x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/2x/AiUpscale_HQ_2x_LineArt.glsl
+    sha256: 97dda24728bd6b39290224f151b71369546c55b353dc83779054b1027ffcd258
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/2x/AiUpscale_HQ_Sharp_2x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/2x/AiUpscale_HQ_Sharp_2x_LineArt.glsl
+    sha256: c3544af38cf890d7135c69d90a61f1a941c37d7bc854fe938bb1aad1ef8bb3b8
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/2x/AiUpscale_Medium_2x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/2x/AiUpscale_Medium_2x_LineArt.glsl
+    sha256: 201a13551071c0e12bb0370aa10b3a7a370ba5a68c18e6096ac1cdd1e8b92d3b
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/2x/AiUpscale_Medium_Sharp_2x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/2x/AiUpscale_Medium_Sharp_2x_LineArt.glsl
+    sha256: 5b9dd2a703c4916832f80251d5fd4123770f4c5d49f9883f00e34f4734866ba0
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/3x/AiUpscale_Fast_3x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/3x/AiUpscale_Fast_3x_LineArt.glsl
+    sha256: 38d1a068fc51e777f85bb19bdfbff701b17dc5211fc7c8064edc08967aeca80b
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/3x/AiUpscale_Fast_Sharp_3x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/3x/AiUpscale_Fast_Sharp_3x_LineArt.glsl
+    sha256: c7127f72d01aea7245383867361debd4a6b1720e15533f6e65249ac1966360a6
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/3x/AiUpscale_HQ_3x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/3x/AiUpscale_HQ_3x_LineArt.glsl
+    sha256: 4213d073a35fb6f61ea6049b4848a3f60bd86b7e8f83664e8ac2c0644eb4247c
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/3x/AiUpscale_HQ_Sharp_3x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/3x/AiUpscale_HQ_Sharp_3x_LineArt.glsl
+    sha256: 55d1d41c60da8d26f5ed57f6ad2a25c161a8ba1698c14452a7f25419961de26d
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/3x/AiUpscale_Medium_3x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/3x/AiUpscale_Medium_3x_LineArt.glsl
+    sha256: d3b4504a296939e062d1f640399b8ad94df6b2a48d84c0826acc4151be34d7af
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/3x/AiUpscale_Medium_Sharp_3x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/3x/AiUpscale_Medium_Sharp_3x_LineArt.glsl
+    sha256: 13e45d5515278c0f268c50a675ecd88e2ea9718ab71daf10c737633eca25ab96
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/4x/AiUpscale_Fast_4x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/4x/AiUpscale_Fast_4x_LineArt.glsl
+    sha256: 3150d36dcdad4e7bf7d35e4f7d4dbeae07bdae3fb00c75bd6b55877db6c2415c
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/4x/AiUpscale_Fast_Sharp_4x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/4x/AiUpscale_Fast_Sharp_4x_LineArt.glsl
+    sha256: 08b0ae04ad21e6537594d80f70f706daeaa3848bea4199926c686096db70a528
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/4x/AiUpscale_HQ_4x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/4x/AiUpscale_HQ_4x_LineArt.glsl
+    sha256: cedd58d32d99f9640e05d173f1dae541bc5ffd104a2ac6de4bc99e59168e3143
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/4x/AiUpscale_HQ_Sharp_4x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/4x/AiUpscale_HQ_Sharp_4x_LineArt.glsl
+    sha256: c509d77301b0b2bbe2766b8cf41d1651ca7bd3ee2bdf3213e441803a2a031204
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/4x/AiUpscale_Medium_4x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/4x/AiUpscale_Medium_4x_LineArt.glsl
+    sha256: 6f1af1a13bb083030a16dbde4fdb54a022f8c6fd9b7829800b16635e464006fc
+    license: GPL-3.0-only
+  - source: mpv user shaders/LineArt/4x/AiUpscale_Medium_Sharp_4x_LineArt.glsl
+    target: portable_config/shaders/AiUpscale/LineArt/4x/AiUpscale_Medium_Sharp_4x_LineArt.glsl
+    sha256: adc24e7c09a192848c619d1cfdcafe29652ef4be0a61a78e2b1c3c68b907c065
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/2x/AiUpscale_Fast_2x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/2x/AiUpscale_Fast_2x_Photo.glsl
+    sha256: 0686ae7806d2d26170b06b0903a9e4fd485037235462e11cb9a744de8ffe9abe
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/2x/AiUpscale_Fast_Sharp_2x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/2x/AiUpscale_Fast_Sharp_2x_Photo.glsl
+    sha256: 33e52d0eacc4df9515b0250f57c97d408627da6ab0ad96bd99e9fef74f7bab74
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/2x/AiUpscale_HQ_2x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/2x/AiUpscale_HQ_2x_Photo.glsl
+    sha256: 9d4aaf201d46d85ef8d25c70b03a241f97e392b51c053de6b3c249353d8533b8
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/2x/AiUpscale_HQ_Sharp_2x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/2x/AiUpscale_HQ_Sharp_2x_Photo.glsl
+    sha256: 0adefc71a1115f9fd493d1a71c0b1c08f1b170739efd9e2ecc689f270a8dd924
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/2x/AiUpscale_Medium_2x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/2x/AiUpscale_Medium_2x_Photo.glsl
+    sha256: fb73a6653164d24309ee8072f95a9dd92d530d0cef1ea63db7d29c4fa5d83906
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/2x/AiUpscale_Medium_Sharp_2x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/2x/AiUpscale_Medium_Sharp_2x_Photo.glsl
+    sha256: 21cc160ab57bb451ef18f60f498e02daddf25ca7d77d7b1188dbce9581d38bd2
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/3x/AiUpscale_Fast_3x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/3x/AiUpscale_Fast_3x_Photo.glsl
+    sha256: 7f4665a81c39afbc2db8b18d08e118824efaf68fababd503935becd891db97b3
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/3x/AiUpscale_Fast_Sharp_3x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/3x/AiUpscale_Fast_Sharp_3x_Photo.glsl
+    sha256: 20e6a2381036d58e95941791476b6da243740ab6f24985ead3993fc2c91fbf9d
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/3x/AiUpscale_HQ_3x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/3x/AiUpscale_HQ_3x_Photo.glsl
+    sha256: 51622daa37e2f39b0857ab2c3446e2d0246adf47efce8f4d04ae52a246789a1d
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/3x/AiUpscale_HQ_Sharp_3x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/3x/AiUpscale_HQ_Sharp_3x_Photo.glsl
+    sha256: d59bdce9028ab2a51348ceb9e3d46e1479e128f0c008143ba2fb0cf241e6007d
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/3x/AiUpscale_Medium_3x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/3x/AiUpscale_Medium_3x_Photo.glsl
+    sha256: c967c4ae478d1b11ae63d93391518f731e0774fc0930828e068655025a551928
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/3x/AiUpscale_Medium_Sharp_3x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/3x/AiUpscale_Medium_Sharp_3x_Photo.glsl
+    sha256: 731a9faf165054c0d8bb458eff40674f0e4f804f49b3117822c85f614167ec69
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/4x/AiUpscale_Fast_4x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/4x/AiUpscale_Fast_4x_Photo.glsl
+    sha256: b305ed202270334cfd8c2f8f65f03799686390e2524f851db3e60a1d9d4eaa0d
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/4x/AiUpscale_Fast_Sharp_4x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/4x/AiUpscale_Fast_Sharp_4x_Photo.glsl
+    sha256: 3b11a4c39c141c6e746afed9f8ff7c8ff25262ddc89c166225fc766450bcd5c9
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/4x/AiUpscale_HQ_4x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/4x/AiUpscale_HQ_4x_Photo.glsl
+    sha256: a52638c40066d291129a4750c07b9329bb8c0ee8b15727cae3f02457698f5d82
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/4x/AiUpscale_HQ_Sharp_4x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/4x/AiUpscale_HQ_Sharp_4x_Photo.glsl
+    sha256: 9b93dff297f25992dc442aa09eae31ebb2deafdaf3582ffe89e2a6359c837119
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/4x/AiUpscale_Medium_4x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/4x/AiUpscale_Medium_4x_Photo.glsl
+    sha256: 8ade76a2cb9f95b28698c49d9d807752a77ff3a19578db60f8c08a13f719cc4c
+    license: GPL-3.0-only
+  - source: mpv user shaders/Photo/4x/AiUpscale_Medium_Sharp_4x_Photo.glsl
+    target: portable_config/shaders/AiUpscale/Photo/4x/AiUpscale_Medium_Sharp_4x_Photo.glsl
+    sha256: 2e53d8b2d1f5013cd3ab236520adbbcedb7dafd94929688f9a0151dfa6b0c09e
+    license: GPL-3.0-only
+  license:
+    spdx: GPL-3.0-only
+    files:
+    - path: LICENSE
+      license: GPL-3.0-only
+      repository: Alexkral/AviSynthAiUpscale
+      ref: d04cf8154e4ba9914f3ead0dec9f7a4a7df7369f
+      source_path: LICENSE
+- id: mpv-prescalers
+  kind: raw-files
+  family: prescalers
+  status: SAFE_WITH_NOTICE
+  platforms: all
+  upstream: bjin/mpv-prescalers
+  ref: b3f0a59d68f33b7162051ea5970a5169558f0ea2
+  version: '2024-01-11'
+  update:
+    mode: latest-commit
+  model:
+    required: true
+    name: nnedi3 neural weights and RAVU LUT data (embedded in .hook)
+    author: bjin and upstream authors
+    source_repository: bjin/mpv-prescalers
+    source_ref: b3f0a59d68f33b7162051ea5970a5169558f0ea2
+    source_paths:
+    - .
+    license_spdx: LGPL-3.0-or-later
+    license_path: LICENSE
+  notes: Official generated .hook shaders. The RGB/YUV variants and the largest zoom LUTs are omitted to limit package size; all upstream files are LGPL-3.0-or-later.
+  files:
+  - source: nnedi3-nns16-win8x4.hook
+    target: portable_config/shaders/EDI/nnedi3_nns16_win8x4.glsl
+    sha256: f50a3f6acc4957bedca9fb1f7d58823e9f4ff149245e29d8013f3223e0830ebd
+    license: LGPL-3.0-or-later
+  - source: nnedi3-nns16-win8x6.hook
+    target: portable_config/shaders/EDI/nnedi3_nns16_win8x6.glsl
+    sha256: cf0b9febc11d172b4db97a5159c4dc7d4316f4bca64e028516e951e07f5b9ae8
+    license: LGPL-3.0-or-later
+  - source: nnedi3-nns32-win8x4.hook
+    target: portable_config/shaders/EDI/nnedi3_nns32_win8x4.glsl
+    sha256: a0d5e3a82394715c3961598ea90f62518959ec3f836e7ba62558a3196ef1bb0b
+    license: LGPL-3.0-or-later
+  - source: nnedi3-nns32-win8x6.hook
+    target: portable_config/shaders/EDI/nnedi3_nns32_win8x6.glsl
+    sha256: 889217f49cb388e6c1314df2fd1a5d8c1d64c8f00f2402742b632b9dcf05646b
+    license: LGPL-3.0-or-later
+  - source: nnedi3-nns64-win8x4.hook
+    target: portable_config/shaders/EDI/nnedi3_nns64_win8x4.glsl
+    sha256: ad6b260942aef9489a389ae19ba8067930e8d26c63a82fb6e23901f570da9329
+    license: LGPL-3.0-or-later
+  - source: nnedi3-nns64-win8x6.hook
+    target: portable_config/shaders/EDI/nnedi3_nns64_win8x6.glsl
+    sha256: d015128cca7efaf408748bae282f024bb21a902542704a9eab4773a7dcc1b364
+    license: LGPL-3.0-or-later
+  - source: nnedi3-nns128-win8x4.hook
+    target: portable_config/shaders/EDI/nnedi3_nns128_win8x4.glsl
+    sha256: aecaf97f3546208beef703be6d659c78160bf88d02d55991548c3f236889f24e
+    license: LGPL-3.0-or-later
+  - source: nnedi3-nns128-win8x6.hook
+    target: portable_config/shaders/EDI/nnedi3_nns128_win8x6.glsl
+    sha256: 8997ce2e9a6be381e6865233a81c97ef4fdb741818f8258283ee78ffa371eec6
+    license: LGPL-3.0-or-later
+  - source: nnedi3-nns256-win8x4.hook
+    target: portable_config/shaders/EDI/nnedi3_nns256_win8x4.glsl
+    sha256: 3e06e3bed88f3f2f6fd99135387a3c146365c841858c6416a6a0a90fa4f84326
+    license: LGPL-3.0-or-later
+  - source: nnedi3-nns256-win8x6.hook
+    target: portable_config/shaders/EDI/nnedi3_nns256_win8x6.glsl
+    sha256: 08bf2f82a83d33191134bd25cebc288b2b966daf13e239889c7f426e41823344
+    license: LGPL-3.0-or-later
+  - source: ravu-r2.hook
+    target: portable_config/shaders/RAISR/ravu_r2.glsl
+    sha256: 4ba053ad4dba0cc341bf55c01e1608c83389453533b3d4bf24b0344c95a6869a
+    license: LGPL-3.0-or-later
+  - source: ravu-r3.hook
+    target: portable_config/shaders/RAISR/ravu_r3.glsl
+    sha256: f3a6992ecdcb5f1d8afce96791f4a980b8a02f5ad6d6f3b2bdd0b85c2bdfad46
+    license: LGPL-3.0-or-later
+  - source: ravu-r4.hook
+    target: portable_config/shaders/RAISR/ravu_r4.glsl
+    sha256: 2d43adc126f349043a7f4b5e11f62f04131b269f7dc18966b45049392217abc7
+    license: LGPL-3.0-or-later
+  - source: ravu-lite-r2.hook
+    target: portable_config/shaders/RAISR/ravu_lite_r2.glsl
+    sha256: 1e76048329c64eed47103f6f5e9f7c943e0f28f1779d65fc815b267f6ac5d760
+    license: LGPL-3.0-or-later
+  - source: ravu-lite-r3.hook
+    target: portable_config/shaders/RAISR/ravu_lite_r3.glsl
+    sha256: 59e77e138444f23db718988b015b9f496b1517f79efeb75806066d7e7ba8e928
+    license: LGPL-3.0-or-later
+  - source: ravu-lite-r4.hook
+    target: portable_config/shaders/RAISR/ravu_lite_r4.glsl
+    sha256: 46905b8a09a41867b351431ae1cb828e371ae1b64c4abe247e3f4acdc22c9704
+    license: LGPL-3.0-or-later
+  - source: ravu-lite-ar-r2.hook
+    target: portable_config/shaders/RAISR/ravu_lite_ar_r2.glsl
+    sha256: cbbabe0a5544c3bd832c7a0ec949a364242643cc834c2840dd25f732a2f13634
+    license: LGPL-3.0-or-later
+  - source: ravu-lite-ar-r3.hook
+    target: portable_config/shaders/RAISR/ravu_lite_ar_r3.glsl
+    sha256: 6225c2362567f818cf6e67e66cd7125a32ec0ea727285643b1e5a377387c5b5f
+    license: LGPL-3.0-or-later
+  - source: ravu-lite-ar-r4.hook
+    target: portable_config/shaders/RAISR/ravu_lite_ar_r4.glsl
+    sha256: 2e7c9beb79be10c57c85eede7a4b6ba1f031a97a26170d88450fc4330a5e8408
+    license: LGPL-3.0-or-later
+  - source: ravu-zoom-r2.hook
+    target: portable_config/shaders/RAISR/ravu_zoom_r2.glsl
+    sha256: a9393ca9d0caf836ebedbb755e9044d5b5de5e23ecc98f8e2c4bc7b0785c433c
+    license: LGPL-3.0-or-later
+  - source: ravu-zoom-r3.hook
+    target: portable_config/shaders/RAISR/ravu_zoom_r3.glsl
+    sha256: 8d398c8e8e4c454bdcb34797dd1d02d7b9a2764ba6997d47dadb50d5f692fddb
+    license: LGPL-3.0-or-later
+  - source: ravu-zoom-ar-r2.hook
+    target: portable_config/shaders/RAISR/ravu_zoom_ar_r2.glsl
+    sha256: 201aa9139251c7dcbe2f0416b9780e4879732733bbae0b1056ece8a2e3b9d86f
+    license: LGPL-3.0-or-later
+  - source: ravu-zoom-ar-r3.hook
+    target: portable_config/shaders/RAISR/ravu_zoom_ar_r3.glsl
+    sha256: eb0c3744af3615c99281a6ff74d1276a5cc7527a30a0bd54984aeb43d0cb2eea
+    license: LGPL-3.0-or-later
+  - source: compute/ravu-3x-r2.hook
+    target: portable_config/shaders/RAISR/ravu_3x_r2.glsl
+    sha256: 98b8a082f744d66450f00b4bae10909daa91229044e5163f12e5d043d05af335
+    license: LGPL-3.0-or-later
+  - source: compute/ravu-3x-r3.hook
+    target: portable_config/shaders/RAISR/ravu_3x_r3.glsl
+    sha256: 8e6a4cd8d826584b00a74f0f2be256d7ad6ceb33712fb84779d4d7e525d1d913
+    license: LGPL-3.0-or-later
+  - source: compute/ravu-3x-r4.hook
+    target: portable_config/shaders/RAISR/ravu_3x_r4.glsl
+    sha256: 91f611ec155e798cf8d5ac7afe186459e4cc6a6a68bf096ccf1a17349fc0f1c2
+    license: LGPL-3.0-or-later
+  license:
+    spdx: LGPL-3.0-or-later
+    files:
+    - path: LICENSE
+      license: LGPL-3.0-or-later
+      repository: bjin/mpv-prescalers
+      ref: b3f0a59d68f33b7162051ea5970a5169558f0ea2
+      source_path: LICENSE
+- id: chroma_from_luma_prediction
+  kind: raw-files
+  family: cfl
+  status: SAFE
+  platforms: all
+  upstream: Artoriuz/glsl-chroma-from-luma-prediction
+  ref: 066dff964b83aa34e893de25d590874bf8c8e94f
+  version: '2026-08-15'
+  update:
+    mode: latest-commit
+  notes: Official MIT chroma-from-luma prediction shaders.
+  files:
+  - source: CfL_Prediction.glsl
+    target: portable_config/shaders/CfL/CfL_Prediction.glsl
+    sha256: f9d12d38d4bab4d9db266b5982c81fadca907396212e22fd8b2c1ca2f317b716
+    license: MIT
+  - source: CfL_Prediction_Lite.glsl
+    target: portable_config/shaders/CfL/CfL_Prediction_Lite.glsl
+    sha256: 159c1dad4daab10eddaae822a5d0fb0b94a38e85a2825fb7df9d7feb509ad4f7
+    license: MIT
+  license:
+    spdx: MIT
+    files:
+    - path: LICENSE
+      license: MIT
+      repository: Artoriuz/glsl-chroma-from-luma-prediction
+      ref: 066dff964b83aa34e893de25d590874bf8c8e94f
+      source_path: LICENSE
+- id: joint_bilateral
+  kind: raw-files
+  family: joint_bilateral
+  status: SAFE
+  platforms: all
+  upstream: Artoriuz/glsl-joint-bilateral
+  ref: 0b4b4a65f41d57ecee60441f632ab33ad23c6188
+  version: '2024-11-08'
+  update:
+    mode: latest-commit
+  notes: Official MIT joint/fast bilateral chroma reconstruction shaders.
+  files:
+  - source: JointBilateral.glsl
+    target: portable_config/shaders/CfL/JointBilateral.glsl
+    sha256: 7ec165eec952c3141073ea76453efea103d3f6c356c456c3d6d597ebaf559b99
+    license: MIT
+  - source: FastBilateral.glsl
+    target: portable_config/shaders/CfL/FastBilateral.glsl
+    sha256: c07910230041b2573e01e9f3158177d057fc91898f5d08d5d59ee604f9f91b77
+    license: MIT
+  license:
+    spdx: MIT
+    files:
+    - path: LICENSE
+      license: MIT
+      repository: Artoriuz/glsl-joint-bilateral
+      ref: 0b4b4a65f41d57ecee60441f632ab33ad23c6188
+      source_path: LICENSE
+- id: pixel_clipper
+  kind: raw-files
+  family: pixel_clipper
+  status: SAFE
+  platforms: all
+  upstream: Artoriuz/glsl-pixel-clipper
+  ref: 92aa62129d0fd2ce482de52b7aa0fe91e99af1b5
+  version: '2024-01-24'
+  update:
+    mode: latest-commit
+  notes: Official MIT pixel clipper shader.
+  files:
+  - source: PixelClipper.glsl
+    target: portable_config/shaders/ETC/PixelClipper.glsl
+    sha256: c81cc3beca7b30f7afe886ae964737801f2d821dc2824602c00bca81e4533bfc
+    license: MIT
+  license:
+    spdx: MIT
+    files:
+    - path: LICENSE
+      license: MIT
+      repository: Artoriuz/glsl-pixel-clipper
+      ref: 92aa62129d0fd2ce482de52b7aa0fe91e99af1b5
+      source_path: LICENSE
+- id: an3223-denoise
+  kind: raw-files
+  family: nlmeans
+  status: SAFE_WITH_NOTICE
+  platforms: all
+  upstream: AN3223/dotfiles
+  ref: 4413db6c1b47aa70ffce40c5a91158e518881718
+  version: '2026-04-02'
+  update:
+    mode: latest-commit
+    license_marker: GNU Lesser General Public License
+  notes: Per-file headers explicitly license these shaders as LGPL-2.1-or-later. The repository root LICENSE is MIT but is not the shader license; the SPDX LGPL text is shipped instead.
+  files:
+  - source: .config/mpv/shaders/hdeband.glsl
+    target: portable_config/shaders/Deband/hdeband.glsl
+    sha256: bcca060b5bf46caf7dac7b74392bc2817b9cc3d4fc5fcade49af35e2b0432b3d
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/nlmeans.glsl
+    target: portable_config/shaders/nlmeans/nlmeans.glsl
+    sha256: 25eafbf1d743342fd8c531ed27cb0b8d23cd4bba2f244c6a0afd3c4931e91e21
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/nlmeans_light.glsl
+    target: portable_config/shaders/nlmeans/nlmeans_light.glsl
+    sha256: f2ccb53072e0d42699e285a0dee7ce7980fc58173531e4d7292aff5ab7106e4b
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/nlmeans_sharpen_denoise.glsl
+    target: portable_config/shaders/nlmeans/nlmeans_sharpen_denoise.glsl
+    sha256: 141d629ae4dde9a9f14353d1dc0ccf38e7b80e73629bccfa6289b6112cb8ba39
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/nlmeans_sharpen_only.glsl
+    target: portable_config/shaders/nlmeans/nlmeans_sharpen_only.glsl
+    sha256: d59751de1040f16f2fd8dd78b630037be6a262f1b599ed6a00b0be5116597bfc
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/nlmeans_temporal.glsl
+    target: portable_config/shaders/nlmeans/nlmeans_temporal.glsl
+    sha256: b6014ef93534fe212668d675b2a8a100781dc94f8af3c8067e2318eb4ded2860
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/nlmeans_light_temporal.glsl
+    target: portable_config/shaders/nlmeans/nlmeans_light_temporal.glsl
+    sha256: 7d6584b627c02a490bb08ac872d5f2e0820709419e40e2c989c98dd83143387a
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/nlmeans_light_sharpen_denoise.glsl
+    target: portable_config/shaders/nlmeans/nlmeans_light_sharpen_denoise.glsl
+    sha256: caeeedd65f7a093862e35ff751c1beacadba4743ef53c83db90ce02c4e8fd11c
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/nlmeans_light_sharpen_only.glsl
+    target: portable_config/shaders/nlmeans/nlmeans_light_sharpen_only.glsl
+    sha256: 3250cd3b1dbb47d1655bada2f440bb928615fba56eecc36026b2897eeac97809
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/nlmeans_temporal_sharpen_denoise.glsl
+    target: portable_config/shaders/nlmeans/nlmeans_temporal_sharpen_denoise.glsl
+    sha256: 89406c35608823837a085c9bf9c409aaecf11864d0d12530d062e99bd73d7e24
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/guided.glsl
+    target: portable_config/shaders/guided/guided.glsl
+    sha256: c151b566023caab8b860f7f8e6e48f2c50114b387d76e7610691df3cd8dc6144
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/guided_fast.glsl
+    target: portable_config/shaders/guided/guided_fast.glsl
+    sha256: eea9c8e604cfb8460a48f59855de683744fb66fd1e55262a6dcd6ffa46f4b59b
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/guided_s.glsl
+    target: portable_config/shaders/guided/guided_s.glsl
+    sha256: c90b3fe5711c3a32a081206cfd41a57a928b2a98ac0e044989411b9e0bc68279
+    license: LGPL-2.1-or-later
+  - source: .config/mpv/shaders/guided_s_fast.glsl
+    target: portable_config/shaders/guided/guided_s_fast.glsl
+    sha256: a3a952df46264b6b5802a705ff7d46fbe022cdbc0ea3a3ea2d603f7f9b383bfb
+    license: LGPL-2.1-or-later
+  license:
+    spdx: LGPL-2.1-or-later
+    files:
+    - path: LGPL-2.1-or-later.txt
+      license: LGPL-2.1-or-later
+      repository: spdx/license-list-data
+      ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
+      source_path: text/LGPL-2.1-or-later.txt
+- id: adaptive-sharpen-lite
+  kind: raw-files
+  family: sharpen
+  status: SAFE_WITH_NOTICE
+  platforms: all
+  upstream: hooke007/mpv_PlayKit
+  ref: 1ad89a52e8dab222b5628ab835bb0803995ead3a
+  version: '20260510'
+  update:
+    mode: pinned
+  derived_from:
+  - repository: bacondither/Adaptive-sharpen
+    commit: 0da6654e464c4136e3a68d80f5cd3bd7563762b9
+    path: shaders/Adaptive-sharpen - Pass one.hlsl
+    license: BSD-2-Clause
+  notes: BSD-2-Clause GLSL derivatives of bacondither Adaptive-sharpen. Every file retains the bacondither notice or a direct LICENSE reference. Recorded as derived from the upstream HLSL.
+  files:
+  - source: portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_RT.glsl
+    target: portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_RT.glsl
+    sha256: 2b94d5dfe14c614e9e9f1aaf4a9fe994b5aa78a5c8c9b5d5706bee6409b09a17
+    license: BSD-2-Clause
+  - source: portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_luma_RT.glsl
+    target: portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_lite_luma_RT.glsl
+    sha256: feaa8023d46d07880b30057201f3641576687fa7f99b8d62f73c6e2e2c1a5575
+    license: BSD-2-Clause
+  - source: portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_RT.glsl
+    target: portable_config/shaders/Adaptive_sharpen/Adaptive_sharpen_RT.glsl
+    sha256: d28213793416ca29959417fbf016561f1cb3d510abc55eaedeeedca81cfe5b55
+    license: BSD-2-Clause
+  license:
+    spdx: BSD-2-Clause
+    files:
+    - path: BSD-2-Clause.txt
+      license: BSD-2-Clause
+      repository: spdx/license-list-data
+      ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
+      source_path: text/BSD-2-Clause.txt
+- id: fsrcnnx
+  kind: file
+  family: fsrcnnx
+  status: SAFE_WITH_NOTICE
+  platforms: all
+  upstream: igv/FSRCNN-TensorFlow
+  version: '1.1'
+  release:
+    mode: tag
+    tag: '1.1'
+  asset:
+    pattern: ^FSRCNNX_x2_16-0-4-1\.glsl$
+    version: '{release_tag}'
+  update:
+    mode: pinned
+  model:
+    required: true
+    name: FSRCNNX x2 16-0-4-1 weights (embedded in release shader)
+    author: igv
+    source_repository: igv/FSRCNN-TensorFlow
+    source_ref: 1aa11ab0e1fc12741fdb84cef31da5619a478670
+    source_paths:
+    - FSRCNNX_x2_16-0-4-1.glsl
+    license_spdx: LGPL-3.0-or-later
+    license_path: LGPL-3.0-or-later.txt
+  notes: Release asset declares LGPL-3.0-or-later in the shader header. The upstream repository LICENSE is MIT; the shader file is the operative work. Model weights are embedded in that release asset.
+  install:
+  - source: FSRCNNX_x2_16-0-4-1.glsl
+    target: portable_config/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl
+  license:
+    spdx: LGPL-3.0-or-later
+    files:
+    - path: LGPL-3.0-or-later.txt
+      license: LGPL-3.0-or-later
+      repository: spdx/license-list-data
+      ref: 31846481de7ea17d92f2f46fad76abe58b2e9bb0
+      source_path: text/LGPL-3.0-or-later.txt
+    - path: MIT.txt
+      license: MIT
+      repository: igv/FSRCNN-TensorFlow
+      ref: 1aa11ab0e1fc12741fdb84cef31da5619a478670
+      source_path: LICENSE
+    parts:
+    - license: LGPL-3.0-or-later
+      scope: release shader file (header declaration)
+    - license: MIT
+      scope: upstream FSRCNN-TensorFlow training and model source repository
