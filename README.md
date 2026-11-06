@@ -32,6 +32,15 @@ CC BY-NC-SA 4.0，k7/QCOM/ESPCN/LUT/Shadertoy 等来源或授权不明）。这�
 进入仓库或构建产物；随包的 AI shader 权重内嵌在 GLSL/.hook 中，并单独记录模型
 来源与许可证。
 
+## 来源声明
+
+本项目源自 [hooke007/mpv_PlayKit](https://github.com/hooke007/mpv_PlayKit)，在其基线
+版本 `mpv-lazy-20260510` 的基础上重新构建。感谢原作者 hooke007 的付出与开源分享。
+
+本项目仅参考其功能与配置结构，历史 PlayKit Lua 未复制进仓库；凡入选的功能均由
+本项目原创实现，或改用官方上游实现（逐项见 `docs/lua-disposition.md`、
+`LICENSE_PROVENANCE.md`）。
+
 ## 下载与使用
 
 发布页：<https://github.com/100pangci/mpv_PlayKit_TLS/releases>
