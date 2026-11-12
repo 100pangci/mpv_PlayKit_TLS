@@ -47,6 +47,78 @@ class ManifestTests(unittest.TestCase):
             self.assertIn(identifier, components)
         self.assertNotIn("k7-modernanime", components)
 
+    def test_raw_files_allow_scripts_and_options_only(self) -> None:
+        from build.common import BuildError, validate_raw_target
+
+        self.assertEqual(
+            validate_raw_target(
+                "scripts/SimpleHistory.lua",
+                "portable_config/scripts/SimpleHistory.lua",
+                "demo",
+            ),
+            "script",
+        )
+        self.assertEqual(
+            validate_raw_target(
+                "config/example.conf",
+                "portable_config/script-opts/example.conf",
+                "demo",
+            ),
+            "script-opt",
+        )
+        self.assertEqual(
+            validate_raw_target(
+                "shaders/demo.glsl",
+                "portable_config/shaders/Demo/demo.glsl",
+                "demo",
+                shader_only=True,
+            ),
+            "shader",
+        )
+        # A raw component may not escape into assets, subdirectories owned by
+        # another component, or a mismatched extension.
+        for source, target in (
+            ("scripts/demo.lua", "portable_config/scripts/uosc/demo.lua"),
+            ("scripts/demo.lua", "portable_config/scripts/demo.conf"),
+            ("scripts/demo.lua", "portable_config/fonts/demo.lua"),
+            ("scripts/demo.lua", "../demo.lua"),
+            ("scripts/demo.lua", "portable_config/scripts/./demo.lua"),
+            ("scripts/demo.glsl", "portable_config/scripts/demo.lua"),
+            ("config/demo.conf", "portable_config/scripts/demo.conf"),
+        ):
+            with self.assertRaises(BuildError, msg=f"{source} -> {target}"):
+                validate_raw_target(source, target, "demo")
+        # Shader sources are exclusive to shaders.yml: other manifests may
+        # only declare Lua scripts and script-opts, even when the target
+        # looks like a valid shader destination.
+        for shader_only, source, target in (
+            (False, "shaders/demo.glsl", "portable_config/shaders/Demo/demo.glsl"),
+            (False, "shaders/demo.hook", "portable_config/shaders/demo.glsl"),
+            (True, "scripts/demo.lua", "portable_config/scripts/demo.lua"),
+            (True, "config/demo.conf", "portable_config/script-opts/demo.conf"),
+        ):
+            with self.assertRaises(BuildError, msg=f"{source} -> {target}"):
+                validate_raw_target(source, target, "demo", shader_only=shader_only)
+        # Unknown source types are rejected by load_manifests with a message
+        # that names the supported extensions.
+        self.assertIsNone(
+            validate_raw_target(
+                "scripts/demo.txt", "portable_config/scripts/demo.lua", "demo"
+            )
+        )
+
+        _, components = load_manifests()
+        history = components["eisa01-mpv-scripts"]
+        self.assertEqual(history["kind"], "raw-files")
+        self.assertEqual(history["license"]["spdx"], "BSD-2-Clause")
+        self.assertEqual(
+            {item["target"] for item in history["files"]},
+            {
+                "portable_config/scripts/SimpleHistory.lua",
+                "portable_config/scripts/SimpleBookmark.lua",
+            },
+        )
+
     def test_license_files_have_spdx(self) -> None:
         _, components = load_manifests()
         labels = {}
@@ -586,6 +658,449 @@ class ShaderUpdateTests(unittest.TestCase):
 
         with self.assertRaises(BuildError):
             self._refresh(path, download, check=False)
+
+
+class ScriptUpdateTests(unittest.TestCase):
+    OLD = "a" * 40
+    NEW = "b" * 40
+
+    def _fixture(self) -> tuple[tempfile.TemporaryDirectory, Path]:
+        root = tempfile.TemporaryDirectory()
+        path = Path(root.name)
+        (path / "project.yml").write_text("repository: owner/repo\n", encoding="utf-8")
+        for name in ("binaries.yml", "resources.yml"):
+            (path / name).write_text("components: []\n", encoding="utf-8")
+        (path / "shaders.yml").write_text("schema: 2\ncomponents: []\n", encoding="utf-8")
+        component = {
+            "id": "demo-script",
+            "kind": "raw-files",
+            "platforms": "all",
+            "upstream": "owner/repo",
+            "ref": self.OLD,
+            "version": "2026-01-01",
+            "update": {"mode": "latest-commit", "license_marker": "MIT License"},
+            "files": [
+                {
+                    "source": "scripts/demo.lua",
+                    "target": "portable_config/scripts/demo.lua",
+                    "sha256": "c" * 64,
+                    "license": "MIT",
+                }
+            ],
+            "license": {
+                "spdx": "MIT",
+                "files": [
+                    {
+                        "path": "LICENSE",
+                        "license": "MIT",
+                        "repository": "owner/repo",
+                        "ref": self.OLD,
+                    }
+                ],
+            },
+        }
+        (path / "scripts.yml").write_text(
+            "# header must survive updates\n"
+            "components:\n"
+            "  - id: demo-script\n"
+            "    kind: raw-files\n"
+            "    platforms: all\n"
+            "    upstream: owner/repo\n"
+            f"    ref: {self.OLD}\n"
+            "    version: \"2026-01-01\"\n"
+            "    update:\n"
+            "      mode: latest-commit\n"
+            "      license_marker: MIT License\n"
+            "    files:\n"
+            "      - source: scripts/demo.lua\n"
+            "        target: portable_config/scripts/demo.lua\n"
+            f"        sha256: {'c' * 64}\n"
+            "        license: MIT\n"
+            "    license:\n"
+            "      spdx: MIT\n"
+            "      files:\n"
+            "        - path: LICENSE\n"
+            "          license: MIT\n"
+            "          repository: owner/repo\n"
+            f"          ref: {self.OLD}\n",
+            encoding="utf-8",
+        )
+        return root, path
+
+    def _fake_refresh(self):
+        new_commit = self.NEW
+        digest = "d" * 64
+        new_version = "2026-11-12"
+
+        def fake(component: dict, validate=None):
+            component["ref"] = new_commit
+            component["version"] = new_version
+            component["files"][0]["sha256"] = digest
+            return {component["files"][0]["target"]: digest}
+
+        return fake
+
+    def test_check_mode_reports_without_writing(self) -> None:
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        before = (path / "scripts.yml").read_bytes()
+        from build import script_update
+
+        with mock.patch.object(script_update, "refresh_component", side_effect=self._fake_refresh()):
+            summary = script_update.refresh(path, check=True)
+        self.assertEqual(summary["changed_components"], ["demo-script"])
+        self.assertEqual(summary["changed_files"], 1)
+        self.assertEqual((path / "scripts.yml").read_bytes(), before)
+
+    def test_refresh_updates_only_the_scripts_manifest(self) -> None:
+        import yaml
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        shader_before = (path / "shaders.yml").read_bytes()
+        from build import script_update
+
+        with mock.patch.object(script_update, "refresh_component", side_effect=self._fake_refresh()):
+            summary = script_update.refresh(path, check=False)
+        self.assertEqual(summary["changed_components"], ["demo-script"])
+        text = (path / "scripts.yml").read_text(encoding="utf-8")
+        self.assertIn("# header must survive updates", text)
+        updated = yaml.safe_load(text)
+        component = updated["components"][0]
+        self.assertEqual(component["ref"], self.NEW)
+        self.assertEqual(component["version"], "2026-11-12")
+        self.assertEqual(component["files"][0]["sha256"], "d" * 64)
+        self.assertEqual((path / "shaders.yml").read_bytes(), shader_before)
+
+    def test_invalid_candidate_is_never_written(self) -> None:
+        from build.common import BuildError
+        from build import script_update
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        before = (path / "scripts.yml").read_bytes()
+
+        def fake(component: dict, validate=None):
+            component["ref"] = self.NEW
+            component["files"][0]["target"] = "portable_config/fonts/demo.lua"
+            return {"portable_config/fonts/demo.lua": "d" * 64}
+
+        with mock.patch.object(script_update, "refresh_component", side_effect=fake):
+            with self.assertRaises(BuildError):
+                script_update.refresh(path, check=False)
+        self.assertEqual((path / "scripts.yml").read_bytes(), before)
+
+    def test_pinned_components_do_not_move(self) -> None:
+        from build import script_update
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        text = path / "scripts.yml"
+        text.write_text(
+            text.read_text(encoding="utf-8").replace(
+                "      mode: latest-commit\n", "      mode: pinned\n"
+            ),
+            encoding="utf-8",
+        )
+        before = text.read_bytes()
+        # Pinned and non-raw components never reach the network refresh helper.
+        with mock.patch.object(
+            script_update,
+            "refresh_component",
+            wraps=script_update.refresh_component,
+        ) as wrapped:
+            summary = script_update.refresh(path, check=False)
+        self.assertEqual(summary["changed_components"], [])
+        wrapped.assert_not_called()
+        self.assertEqual(text.read_bytes(), before)
+
+    def _downloads(self):
+        """Download table for a real refresh through shader_update."""
+        license_text = b"MIT License\n"
+        payload = b"-- demo script\n-- MIT License\nreturn {}\n"
+        table = {
+            f"https://raw.githubusercontent.com/owner/repo/{self.OLD}/LICENSE": license_text,
+            f"https://raw.githubusercontent.com/owner/repo/{self.NEW}/LICENSE": license_text,
+            f"https://raw.githubusercontent.com/owner/repo/{self.NEW}/scripts/demo.lua": payload,
+        }
+
+        def fake(url: str, **_: object) -> bytes:
+            if url not in table:
+                raise AssertionError(f"unexpected download: {url}")
+            return table[url]
+
+        return fake, payload
+
+    def test_real_refresh_pins_the_new_commit_and_files(self) -> None:
+        import yaml
+
+        from build import script_update, shader_update
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        download, payload = self._downloads()
+        with mock.patch.object(
+            shader_update, "latest_commit", return_value=(self.NEW, "2026-11-12")
+        ) as latest, mock.patch.object(
+            shader_update, "download_raw", side_effect=download
+        ):
+            summary = script_update.refresh(path, check=False)
+
+        latest.assert_called_once_with("owner/repo")
+        self.assertEqual(summary["changed_components"], ["demo-script"])
+        self.assertEqual(summary["changed_files"], 1)
+        text = (path / "scripts.yml").read_text(encoding="utf-8")
+        self.assertIn("# header must survive updates", text)
+        updated = yaml.safe_load(text)
+        component = updated["components"][0]
+        self.assertEqual(component["ref"], self.NEW)
+        self.assertEqual(component["version"], "2026-11-12")
+        self.assertEqual(
+            component["files"][0]["sha256"], hashlib.sha256(payload).hexdigest()
+        )
+        self.assertEqual(component["license"]["files"][0]["ref"], self.NEW)
+        # No floating URL may ever be written: resolve derives raw URLs from
+        # the pinned commit only.
+        self.assertNotIn("raw.githubusercontent.com", text)
+        self.assertNotIn("url:", text)
+        self.assertRegex(component["ref"], r"^[0-9a-f]{40}$")
+
+    def test_real_refresh_stops_on_license_change(self) -> None:
+        from build import script_update, shader_update
+        from build.common import BuildError
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        before = (path / "scripts.yml").read_bytes()
+        license_text = b"MIT License\n"
+        table = {
+            f"https://raw.githubusercontent.com/owner/repo/{self.OLD}/LICENSE": license_text,
+            f"https://raw.githubusercontent.com/owner/repo/{self.NEW}/LICENSE": b"MIT License, revised\n",
+        }
+
+        def fake(url: str, **_: object) -> bytes:
+            return table[url]
+
+        with mock.patch.object(
+            shader_update, "latest_commit", return_value=(self.NEW, "2026-11-12")
+        ), mock.patch.object(shader_update, "download_raw", side_effect=fake):
+            with self.assertRaisesRegex(BuildError, "license text changed"):
+                script_update.refresh(path, check=False)
+        self.assertEqual((path / "scripts.yml").read_bytes(), before)
+
+    def test_real_refresh_stops_when_marker_disappears(self) -> None:
+        from build import script_update, shader_update
+        from build.common import BuildError
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        before = (path / "scripts.yml").read_bytes()
+        license_text = b"MIT License\n"
+
+        def fake(url: str, **_: object) -> bytes:
+            if url.endswith("/LICENSE"):
+                return license_text
+            return b"-- rewritten upstream file without a marker\n"
+
+        with mock.patch.object(
+            shader_update, "latest_commit", return_value=(self.NEW, "2026-11-12")
+        ), mock.patch.object(shader_update, "download_raw", side_effect=fake):
+            with self.assertRaisesRegex(BuildError, "license marker"):
+                script_update.refresh(path, check=False)
+        self.assertEqual((path / "scripts.yml").read_bytes(), before)
+
+    def test_unsafe_target_stops_refresh_before_any_network_call(self) -> None:
+        from build import script_update, shader_update
+        from build.common import BuildError
+
+        root, path = self._fixture()
+        self.addCleanup(root.cleanup)
+        text = path / "scripts.yml"
+        text.write_text(
+            text.read_text(encoding="utf-8").replace(
+                "target: portable_config/scripts/demo.lua",
+                "target: portable_config/fonts/demo.lua",
+            ),
+            encoding="utf-8",
+        )
+        before = text.read_bytes()
+        with mock.patch.object(shader_update, "latest_commit") as latest:
+            with self.assertRaisesRegex(BuildError, "direct \\.lua child"):
+                script_update.refresh(path, check=False)
+            latest.assert_not_called()
+            self.assertEqual(text.read_bytes(), before)
+
+    def test_main_exit_codes(self) -> None:
+        from build import script_update
+        from build.common import BuildError
+
+        with mock.patch.object(
+            script_update,
+            "refresh",
+            return_value={"changed_components": [], "changed_files": 0},
+        ):
+            self.assertEqual(script_update.main(["--check"]), 0)
+        with mock.patch.object(
+            script_update,
+            "refresh",
+            return_value={"changed_components": ["demo-script"], "changed_files": 1},
+        ), mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            self.assertEqual(script_update.main(["--json"]), 1)
+            self.assertIn('"changed_components"', stdout.getvalue())
+        with mock.patch.object(
+            script_update, "refresh", side_effect=BuildError("boom")
+        ), mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            self.assertEqual(script_update.main([]), 2)
+            self.assertIn("boom", stderr.getvalue())
+
+
+class RawInstallTests(unittest.TestCase):
+    """Defense-in-depth checks for build.assemble.install_raw_component."""
+
+    def _fixture(self) -> tuple[tempfile.TemporaryDirectory, Path, Path]:
+        root = tempfile.TemporaryDirectory()
+        base = Path(root.name)
+        stage = base / "stage"
+        stage.mkdir()
+        work = base / "work"
+        work.mkdir()
+        return root, stage, work
+
+    def _payloads(self, work: Path, entries) -> tuple[dict, dict]:
+        component = {"id": "demo", "kind": "raw-files", "files": []}
+        fetched = {"kind": "raw-files", "files": []}
+        for source, target, payload in entries:
+            digest = hashlib.sha256(payload).hexdigest()
+            local = work / "raw" / Path(source).name
+            local.parent.mkdir(parents=True, exist_ok=True)
+            local.write_bytes(payload)
+            component["files"].append(
+                {"source": source, "target": target, "sha256": digest}
+            )
+            fetched["files"].append(
+                {
+                    "source": source,
+                    "target": target,
+                    "sha256": digest,
+                    "local_path": str(local.relative_to(work)),
+                }
+            )
+        return component, fetched
+
+    def test_installs_lua_and_conf_targets(self) -> None:
+        from build.assemble import install_raw_component
+
+        root, stage, work = self._fixture()
+        self.addCleanup(root.cleanup)
+        lua = b"-- demo\n"
+        conf = b"demo_option=yes\n"
+        component, fetched = self._payloads(
+            work,
+            [
+                ("scripts/demo.lua", "portable_config/scripts/demo.lua", lua),
+                ("config/demo.conf", "portable_config/script-opts/demo.conf", conf),
+            ],
+        )
+        component["_manifest"] = "scripts.yml"
+        install_raw_component(stage, component, fetched, work)
+        self.assertEqual(
+            (stage / "portable_config/scripts/demo.lua").read_bytes(), lua
+        )
+        self.assertEqual(
+            (stage / "portable_config/script-opts/demo.conf").read_bytes(), conf
+        )
+
+    def test_rejects_shader_file_in_a_script_manifest(self) -> None:
+        from build.assemble import install_raw_component
+        from build.common import BuildError
+
+        root, stage, work = self._fixture()
+        self.addCleanup(root.cleanup)
+        payload = b"//! shader\n"
+        component, fetched = self._payloads(
+            work,
+            [("shaders/demo.glsl", "portable_config/shaders/demo.glsl", payload)],
+        )
+        component["_manifest"] = "scripts.yml"
+        with self.assertRaisesRegex(BuildError, "only allowed in shaders.yml"):
+            install_raw_component(stage, component, fetched, work)
+        self.assertFalse((stage / "portable_config/shaders/demo.glsl").exists())
+
+    def test_shader_manifest_still_rejects_lua_targets(self) -> None:
+        from build.assemble import install_raw_component
+        from build.common import BuildError
+
+        root, stage, work = self._fixture()
+        self.addCleanup(root.cleanup)
+        payload = b"-- demo\n"
+        component, fetched = self._payloads(
+            work,
+            [("scripts/demo.lua", "portable_config/scripts/demo.lua", payload)],
+        )
+        component["_manifest"] = "shaders.yml"
+        with self.assertRaisesRegex(BuildError, "shader raw file source"):
+            install_raw_component(stage, component, fetched, work)
+
+    def test_rejects_target_traversal(self) -> None:
+        from build.assemble import install_raw_component
+        from build.common import BuildError
+
+        root, stage, work = self._fixture()
+        self.addCleanup(root.cleanup)
+        component, fetched = self._payloads(
+            work, [("scripts/demo.lua", "../evil.lua", b"-- demo\n")]
+        )
+        component["_manifest"] = "scripts.yml"
+        with self.assertRaises(BuildError):
+            install_raw_component(stage, component, fetched, work)
+        self.assertFalse((stage.parent / "evil.lua").exists())
+
+    def test_rejects_tampered_fetched_hash(self) -> None:
+        from build.assemble import install_raw_component
+        from build.common import BuildError
+
+        root, stage, work = self._fixture()
+        self.addCleanup(root.cleanup)
+        component, fetched = self._payloads(
+            work, [("scripts/demo.lua", "portable_config/scripts/demo.lua", b"-- demo\n")]
+        )
+        component["_manifest"] = "scripts.yml"
+        (work / fetched["files"][0]["local_path"]).write_bytes(b"-- tampered\n")
+        with self.assertRaisesRegex(BuildError, "hash changed"):
+            install_raw_component(stage, component, fetched, work)
+
+    def test_rejects_local_path_escape_and_missing_files(self) -> None:
+        from build.assemble import install_raw_component
+        from build.common import BuildError
+
+        root, stage, work = self._fixture()
+        self.addCleanup(root.cleanup)
+        (work.parent / "outside.lua").write_bytes(b"-- outside\n")
+        component, fetched = self._payloads(
+            work, [("scripts/demo.lua", "portable_config/scripts/demo.lua", b"-- demo\n")]
+        )
+        component["_manifest"] = "scripts.yml"
+        fetched["files"][0]["local_path"] = "../outside.lua"
+        with self.assertRaisesRegex(BuildError, "unsafe fetched raw path"):
+            install_raw_component(stage, component, fetched, work)
+
+        fetched["files"][0]["local_path"] = "raw/missing.lua"
+        with self.assertRaisesRegex(BuildError, "missing or unsafe"):
+            install_raw_component(stage, component, fetched, work)
+
+    def test_rejects_fetched_manifest_mismatch(self) -> None:
+        from build.assemble import install_raw_component
+        from build.common import BuildError
+
+        root, stage, work = self._fixture()
+        self.addCleanup(root.cleanup)
+        component, fetched = self._payloads(
+            work, [("scripts/demo.lua", "portable_config/scripts/demo.lua", b"-- demo\n")]
+        )
+        component["_manifest"] = "scripts.yml"
+        fetched["files"][0]["sha256"] = "e" * 64
+        with self.assertRaisesRegex(BuildError, "differ from manifest"):
+            install_raw_component(stage, component, fetched, work)
 
 
 class VersionTests(unittest.TestCase):
@@ -2299,6 +2814,31 @@ class WorkflowTests(unittest.TestCase):
         )
         self.assertIn("shaders_changed", upload["if"])
 
+    def test_monthly_refreshes_script_pins_before_resolving(self) -> None:
+        jobs = self._workflow("monthly-update.yml")["jobs"]
+        resolve = jobs["resolve"]
+        runs = self._runs(resolve)
+        self.assertIn("python -m build.script_update", runs)
+        self.assertLess(
+            runs.index("python -m build.script_update"),
+            runs.index("python -m build.resolve"),
+        )
+        self.assertIn("scripts_changed", resolve["outputs"])
+        candidate = next(
+            step
+            for step in resolve["steps"]
+            if step.get("name") == "Prepare candidate commit"
+        )
+        self.assertIn("manifests/scripts.yml", candidate["run"])
+        self.assertIn("SCRIPTS_CHANGED", candidate["run"])
+        self.assertIn("scripts_changed", jobs["commit-lock"]["if"])
+        upload = next(
+            step
+            for step in resolve["steps"]
+            if step.get("name") == "Upload candidate lock"
+        )
+        self.assertIn("scripts_changed", upload["if"])
+
     def test_candidate_artifact_always_matches_the_repository_lock(self) -> None:
         jobs = self._workflow("monthly-update.yml")["jobs"]
         runs = self._runs(jobs["resolve"])
@@ -2359,6 +2899,33 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('--target "$SOURCE_SHA"', runs)
         self.assertIn("refs/tags/$TAG", runs)
         self.assertIn("release $TAG already exists", runs)
+
+    def test_release_supports_optional_draft(self) -> None:
+        triggers = self._triggers("release.yml")
+        inputs = (triggers.get("workflow_call") or {}).get("inputs") or {}
+        self.assertEqual(inputs["draft"]["type"], "boolean")
+        self.assertEqual(inputs["draft"]["default"], False)
+
+        job = self._workflow("release.yml")["jobs"]["release"]
+        publish = next(
+            step
+            for step in job["steps"]
+            if step.get("name") == "Publish GitHub Release"
+        )
+        self.assertEqual(publish["env"]["DRAFT"], "${{ inputs.draft }}")
+        runs = publish["run"]
+        self.assertIn('if [ "$DRAFT" = "true" ]', runs)
+        self.assertIn("args+=(--draft)", runs)
+        self.assertIn("args+=(--latest)", runs)
+
+    def test_monthly_can_request_a_draft_release(self) -> None:
+        triggers = self._triggers("monthly-update.yml")
+        dispatch = (triggers.get("workflow_dispatch") or {}).get("inputs") or {}
+        self.assertEqual(dispatch["draft"]["type"], "boolean")
+        self.assertEqual(dispatch["draft"]["default"], False)
+
+        release = self._workflow("monthly-update.yml")["jobs"]["release"]
+        self.assertEqual(release["with"]["draft"], "${{ inputs.draft || false }}")
 
     def test_force_input_is_forwarded_to_decide(self) -> None:
         job = self._workflow("monthly-update.yml")["jobs"]["resolve"]

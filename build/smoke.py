@@ -51,6 +51,11 @@ def main(argv: list[str] | None = None) -> int:
 
     with tempfile.TemporaryDirectory(prefix="playkit-smoke-") as temporary:
         home = Path(temporary)
+        # SimpleHistory/SimpleBookmark write under user/data relative to the
+        # configured log_path.  The package ships this directory with a README
+        # placeholder; mirror it here because the smoke run redirects log_path
+        # to the temporary HOME.
+        (home / "user" / "data").mkdir(parents=True)
         env = {
             **os.environ,
             "HOME": str(home),
@@ -73,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
             "--script-opts-append=update-check-enabled=no",
             f"--script-opts-append=save_global_props-file={home / 'saved-props.json'}",
             f"--script-opts-append=thumbfast-cache_dir={home / 'thumbfast'}",
+            "--script-opts-append=SimpleHistory-log_path=/:var%HOME%",
+            "--script-opts-append=SimpleBookmark-log_path=/:var%HOME%",
             f"--watch-later-dir={home / 'watch_later'}",
             f"--icc-cache-dir={home / 'icc'}",
             f"--gpu-shader-cache-dir={home / 'shader'}",

@@ -24,6 +24,12 @@ on:
         type: string
         required: false
         default: ""
+      # A manual monthly run can produce a draft release for review.  Scheduled
+      # runs leave this false and publish normally.
+      draft:
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -108,6 +114,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+          DRAFT: ${{ inputs.draft }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -120,12 +127,21 @@ jobs:
             echo "::error::tag $TAG already exists; refusing to reuse it"
             exit 1
           fi
-          gh release create "$TAG" \
-            "dist/release/mpv-PlayKit-${VERSION}-windows-x64.zip" \
-            "dist/release/mpv-PlayKit-${VERSION}-linux-x64.tar.gz" \
-            "dist/release/manifest.json" \
-            "dist/release/SHA256SUMS" \
-            --title "mpv PlayKit ${VERSION}" \
-            --notes-file dist/release/release-notes.md \
-            --target "$SOURCE_SHA" \
-            --latest
+          args=(
+            "$TAG"
+            "dist/release/mpv-PlayKit-${VERSION}-windows-x64.zip"
+            "dist/release/mpv-PlayKit-${VERSION}-linux-x64.tar.gz"
+            "dist/release/manifest.json"
+            "dist/release/SHA256SUMS"
+            --title "mpv PlayKit ${VERSION}"
+            --notes-file dist/release/release-notes.md
+            --target "$SOURCE_SHA"
+          )
+          # Drafts cannot be marked latest; they become eligible when a human
+          # publishes them from the Releases page.
+          if [ "$DRAFT" = "true" ]; then
+            args+=(--draft)
+          else
+            args+=(--latest)
+          fi
+          gh release create "${args[@]}"

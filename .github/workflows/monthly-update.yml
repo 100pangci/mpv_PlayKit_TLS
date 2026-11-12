@@ -25,6 +25,10 @@ on:
         description: Build and release even when nothing changed
         type: boolean
         default: false
+      draft:
+        description: Create the GitHub Release as a draft for review
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -49,6 +53,7 @@ jobs:
       upstream_changed: ${{ steps.decide.outputs.upstream_changed }}
       inputs_changed: ${{ steps.decide.outputs.inputs_changed }}
       shaders_changed: ${{ steps.shaders.outputs.shaders_changed }}
+      scripts_changed: ${{ steps.scripts.outputs.scripts_changed }}
       version: ${{ steps.decide.outputs.version }}
       tag: ${{ steps.decide.outputs.tag }}
       reason: ${{ steps.decide.outputs.reason }}
@@ -85,6 +90,19 @@ jobs:
             1) echo "shaders_changed=true" >> "$GITHUB_OUTPUT" ;;
             *) exit "${status}" ;;
           esac
+      - name: Refresh script pins
+        id: scripts
+        # Same contract as the shader step: exit 1 means "pins changed", while
+        # a changed upstream license or marker exits 2 and fails the job.
+        run: |
+          set -uo pipefail
+          status=0
+          python -m build.script_update || status=$?
+          case "${status}" in
+            0) echo "scripts_changed=false" >> "$GITHUB_OUTPUT" ;;
+            1) echo "scripts_changed=true" >> "$GITHUB_OUTPUT" ;;
+            *) exit "${status}" ;;
+          esac
       - name: Resolve latest upstream releases
         run: |
           set -euo pipefail
@@ -108,23 +126,23 @@ jobs:
             $extra
       - name: Prepare candidate commit
         id: candidate
-        if: steps.decide.outputs.release_needed == 'true' || steps.decide.outputs.lock_changed == 'true' || steps.shaders.outputs.shaders_changed == 'true'
+        if: steps.decide.outputs.release_needed == 'true' || steps.decide.outputs.lock_changed == 'true' || steps.shaders.outputs.shaders_changed == 'true' || steps.scripts.outputs.scripts_changed == 'true'
         env:
           LOCK_CHANGED: ${{ steps.decide.outputs.lock_changed }}
           SHADERS_CHANGED: ${{ steps.shaders.outputs.shaders_changed }}
+          SCRIPTS_CHANGED: ${{ steps.scripts.outputs.scripts_changed }}
           CANDIDATE_ARTIFACT: playkit-candidate-lock-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
           branch=""
-          if [ "${LOCK_CHANGED}" = "true" ] || [ "${SHADERS_CHANGED}" = "true" ]; then
-            # The candidate lock was resolved from the refreshed shader
-            # manifests, so it is authoritative even when the lock itself did
-            # not change.
+          if [ "${LOCK_CHANGED}" = "true" ] || [ "${SHADERS_CHANGED}" = "true" ] || [ "${SCRIPTS_CHANGED}" = "true" ]; then
+            # The candidate lock was resolved from the refreshed manifests, so
+            # it is authoritative even when the lock itself did not change.
             cp .work/candidate/sources.lock.json sources.lock.json
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add sources.lock.json manifests/shaders.yml manifests/shader-audit.json
-            git commit -m "chore: update upstream lock and shader pins"
+            git add sources.lock.json manifests/shaders.yml manifests/shader-audit.json manifests/scripts.yml
+            git commit -m "chore: update upstream lock, shader and script pins"
             branch="playkit/candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             # Temporary branch only.  main is untouched until every build and
             # verification step below has passed.
@@ -141,7 +159,7 @@ jobs:
           echo "candidate_branch=${branch}" >> "$GITHUB_OUTPUT"
           echo "candidate_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Upload candidate lock
-        if: steps.decide.outputs.release_needed == 'true' || steps.decide.outputs.lock_changed == 'true' || steps.shaders.outputs.shaders_changed == 'true'
+        if: steps.decide.outputs.release_needed == 'true' || steps.decide.outputs.lock_changed == 'true' || steps.shaders.outputs.shaders_changed == 'true' || steps.scripts.outputs.scripts_changed == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playkit-candidate-lock-${{ github.run_id }}-${{ github.run_attempt }}
@@ -169,7 +187,7 @@ jobs:
     if: |
       always() &&
       needs.resolve.result == 'success' &&
-      (needs.resolve.outputs.release_needed == 'true' || needs.resolve.outputs.lock_changed == 'true' || needs.resolve.outputs.shaders_changed == 'true') &&
+      (needs.resolve.outputs.release_needed == 'true' || needs.resolve.outputs.lock_changed == 'true' || needs.resolve.outputs.shaders_changed == 'true' || needs.resolve.outputs.scripts_changed == 'true') &&
       (needs.resolve.outputs.release_needed != 'true' || needs.build.result == 'success')
     runs-on: ubuntu-24.04
     outputs:
@@ -233,3 +251,4 @@ jobs:
       source_sha: ${{ needs.commit-lock.outputs.final_sha }}
       lock_artifact: ${{ needs.resolve.outputs.lock_artifact }}
       lock_sha256: ${{ needs.resolve.outputs.lock_sha256 }}
+      draft: ${{ inputs.draft || false }}

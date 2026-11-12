@@ -39,6 +39,14 @@ use crate::util::{
 };
 
 const MAX_PRESERVED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+/// User-owned runtime data (playback history, bookmarks and future log files).
+/// The package ships only a README placeholder; runtime files are created and
+/// migrated in the user layer.
+const USER_DATA_DIR: &str = "user/data";
+/// User-owned runtime subtrees that must survive installs and rollbacks.
+/// Screenshots and the burst queue are created locally by screenshot_tools.lua
+/// and are never part of the official package.
+const USER_RUNTIME_DIRS: &[&str] = &["data", "screenshots", "screenshot-tools"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnmanagedPolicy {
@@ -818,6 +826,46 @@ fn normalize_patch_key(kind: crate::config::ConfigKind, key: &str) -> String {
     }
 }
 
+/// Create the user-owned runtime data directory without following a symlink
+/// outside the installation.  The package carries only a README placeholder;
+/// the helper creates the directory on install, repair and rollback.
+fn ensure_user_data_dir(portable: &Path) -> Result<()> {
+    let path = portable.join(USER_DATA_DIR);
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            Err(Failure::blocked(
+                "用户数据目录不是普通目录，更新已停止。",
+                format!("{}", path.display()),
+            ))
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => ensure_dir(&path),
+        Err(error) => Err(io_context(&format!("stat {}", path.display()), error)),
+    }
+}
+
+/// Copy the complete user-owned runtime subtrees while keeping the
+/// destination directories real.  `copy_tree_merge` replaces files with the
+/// same name, so an update and a later rollback both retain the newest data.
+fn preserve_user_data(source_portable: &Path, destination_portable: &Path) -> Result<()> {
+    for name in USER_RUNTIME_DIRS {
+        let source = source_portable.join("user").join(name);
+        match fs::symlink_metadata(&source) {
+            Ok(metadata) if metadata.is_dir() => {
+                copy_tree_merge(
+                    &source,
+                    &destination_portable.join("user").join(name),
+                    source_portable,
+                )?;
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io_context(&format!("stat {}", source.display()), error)),
+        }
+    }
+    ensure_user_data_dir(destination_portable)
+}
+
 fn preserve_runtime(
     current_portable: &Path,
     staged_portable: &Path,
@@ -829,6 +877,7 @@ fn preserve_runtime(
     // the existing user-owned subtrees over before applying patches and
     // copying user scripts/fonts/script-opts into place.  `user/` is never
     // deleted by the updater.
+    preserve_user_data(current_portable, staged_portable)?;
     let current_user = current_portable.join("user");
     if current_user.is_dir() {
         let staged_user = staged_portable.join("user");
@@ -1516,6 +1565,7 @@ fn repair_inner(options: &RepairOptions, layout: &Layout) -> Result<RepairReport
     let platform = detect_platform(&layout.root, None)?;
     let version = read_install_version(&layout.root, platform)?;
     let portable = layout.root.join("portable_config");
+    ensure_user_data_dir(&portable)?;
     if options.if_needed {
         if let Some(state) = State::load(&portable)? {
             let fingerprint = user_layer_fingerprint(&portable, &version, platform)?;
@@ -1710,6 +1760,14 @@ fn rollback_inner(
         wait_for_process(options.wait_pid, options.wait_timeout)?;
     }
     reporter.set("rolling-back", "正在交换安装目录。", None);
+    // The previous package is a frozen snapshot from install time.  Carry the
+    // history/bookmark data written while the new version was running into it
+    // before the swap so a rollback does not drop the newest records.
+    let current_portable = layout.root.join("portable_config");
+    let previous_portable = layout.previous.join("portable_config");
+    if layout.previous.join("playkit-version.json").is_file() {
+        preserve_user_data(&current_portable, &previous_portable)?;
+    }
     perform_rollback(layout)?;
     let should_relaunch = match options.relaunch {
         RelaunchPolicy::Yes => true,
@@ -1812,6 +1870,97 @@ mod tests {
     }
 
     #[test]
+    fn preserve_user_data_migrates_the_whole_subtree() {
+        let dir = tempdir().unwrap();
+        let current = dir.path().join("current");
+        let staged = dir.path().join("staged");
+        fs::create_dir_all(current.join(USER_DATA_DIR).join("nested")).unwrap();
+        fs::create_dir_all(staged.join(USER_DATA_DIR)).unwrap();
+        fs::write(
+            current.join(USER_DATA_DIR).join("mpvHistory.log"),
+            b"new history\n",
+        )
+        .unwrap();
+        fs::write(
+            current.join(USER_DATA_DIR).join("mpvBookmark.log"),
+            b"new bookmark\n",
+        )
+        .unwrap();
+        fs::write(
+            current
+                .join(USER_DATA_DIR)
+                .join("nested")
+                .join("future.log"),
+            b"future data\n",
+        )
+        .unwrap();
+        fs::write(
+            staged.join(USER_DATA_DIR).join("README.md"),
+            b"documentation\n",
+        )
+        .unwrap();
+
+        preserve_user_data(&current, &staged).unwrap();
+
+        let staged_data = staged.join(USER_DATA_DIR);
+        assert_eq!(
+            fs::read_to_string(staged_data.join("mpvHistory.log")).unwrap(),
+            "new history\n"
+        );
+        assert_eq!(
+            fs::read_to_string(staged_data.join("mpvBookmark.log")).unwrap(),
+            "new bookmark\n"
+        );
+        assert_eq!(
+            fs::read_to_string(staged_data.join("nested/future.log")).unwrap(),
+            "future data\n"
+        );
+        assert_eq!(
+            fs::read_to_string(staged_data.join("README.md")).unwrap(),
+            "documentation\n"
+        );
+    }
+
+    #[test]
+    fn preserve_user_data_migrates_screenshots_and_burst_queue() {
+        let dir = tempdir().unwrap();
+        let current = dir.path().join("current");
+        let staged = dir.path().join("staged");
+        fs::create_dir_all(current.join("user/screenshots")).unwrap();
+        fs::create_dir_all(current.join("user/screenshot-tools")).unwrap();
+
+        fs::write(current.join("user/screenshots/frame.png"), b"png bytes\n").unwrap();
+        fs::write(
+            current.join("user/screenshot-tools/queue.jsonl"),
+            b"{\"path\":\"frame.png\"}\n",
+        )
+        .unwrap();
+
+        preserve_user_data(&current, &staged).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(staged.join("user/screenshots/frame.png")).unwrap(),
+            "png bytes\n"
+        );
+        assert_eq!(
+            fs::read_to_string(staged.join("user/screenshot-tools/queue.jsonl")).unwrap(),
+            "{\"path\":\"frame.png\"}\n"
+        );
+        assert!(staged.join(USER_DATA_DIR).is_dir());
+    }
+
+    #[test]
+    fn ensure_user_data_dir_creates_a_missing_directory() {
+        let dir = tempdir().unwrap();
+        let portable = dir.path().join("portable_config");
+        fs::create_dir_all(&portable).unwrap();
+
+        ensure_user_data_dir(&portable).unwrap();
+
+        assert!(portable.join(USER_DATA_DIR).is_dir());
+    }
+
+    #[test]
     fn read_install_version_accepts_development_labels() {
         let dir = tempdir().unwrap();
         for version in ["ci", "0.0.0-dev", "2026.11"] {
@@ -1865,6 +2014,80 @@ mod tests {
 
         let again = repair(&options).unwrap();
         assert!(!again.repaired);
+    }
+
+    #[test]
+    fn runtime_data_is_copied_and_the_directory_is_created() {
+        let dir = tempdir().unwrap();
+        let current = dir.path().join("current/portable_config");
+        let staged = dir.path().join("staged/portable_config");
+        fs::create_dir_all(current.join(USER_DATA_DIR).join("nested")).unwrap();
+        fs::write(
+            current.join(USER_DATA_DIR).join("mpvHistory.log"),
+            b"history\n",
+        )
+        .unwrap();
+        fs::write(
+            current
+                .join(USER_DATA_DIR)
+                .join("nested")
+                .join("mpvBookmark.log"),
+            b"bookmark\n",
+        )
+        .unwrap();
+
+        let mut warnings = Vec::new();
+        preserve_runtime(&current, &staged, None, None, &mut warnings).unwrap();
+        assert_eq!(
+            fs::read(staged.join(USER_DATA_DIR).join("mpvHistory.log")).unwrap(),
+            b"history\n"
+        );
+        assert_eq!(
+            fs::read(
+                staged
+                    .join(USER_DATA_DIR)
+                    .join("nested")
+                    .join("mpvBookmark.log")
+            )
+            .unwrap(),
+            b"bookmark\n"
+        );
+
+        // A fresh install has no data directory in the package; the helper
+        // still creates the user-owned location for runtime writers.
+        let empty_current = dir.path().join("empty-current/portable_config");
+        let empty_staged = dir.path().join("empty-staged/portable_config");
+        preserve_runtime(&empty_current, &empty_staged, None, None, &mut warnings).unwrap();
+        assert!(empty_staged.join(USER_DATA_DIR).is_dir());
+    }
+
+    #[test]
+    fn repair_if_needed_creates_the_user_data_directory() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("mpv-PlayKit-ci");
+        fs::create_dir_all(root.join("portable_config")).unwrap();
+        let marker = if cfg!(windows) {
+            "mpv.exe"
+        } else {
+            "mpv-playkit"
+        };
+        fs::write(root.join(marker), b"").unwrap();
+        write_version_file(&root, "ci");
+        let options = RepairOptions {
+            root: root.clone(),
+            assume_official: false,
+            if_needed: true,
+            report_status: false,
+            quiet: true,
+        };
+
+        repair(&options).unwrap();
+        let data = root.join("portable_config").join(USER_DATA_DIR);
+        assert!(data.is_dir());
+        fs::remove_dir(&data).unwrap();
+        let report = repair(&options).unwrap();
+        assert!(!report.repaired);
+        assert!(data.is_dir());
     }
 
     #[test]

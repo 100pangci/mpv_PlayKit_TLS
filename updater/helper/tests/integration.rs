@@ -148,6 +148,7 @@ fn write_portable(portable: &Path, version: &str, new_version: bool) {
         portable.join("user/script-opts/README.md"),
         "user script opts\n",
     );
+    write_file(portable.join("user/data/README.md"), "user runtime data\n");
 
     let hashes: BTreeMap<String, String> = managed
         .iter()
@@ -420,6 +421,14 @@ fn setup_old_install(root: &Path) {
         root.join("portable_config/_cache/watch_later/movie.state"),
         "position=1\n",
     );
+    write_file(
+        root.join("portable_config/user/data/mpvHistory.log"),
+        "old history\n",
+    );
+    write_file(
+        root.join("portable_config/user/data/mpvBookmark.log"),
+        "old bookmark\n",
+    );
 }
 
 #[test]
@@ -455,6 +464,24 @@ fn full_install_captures_edits_preserves_user_layer_and_rolls_back() {
     assert!(root
         .join("portable_config/_cache/watch_later/movie.state")
         .is_file());
+    assert_eq!(
+        fs::read_to_string(root.join("portable_config/user/data/mpvHistory.log")).unwrap(),
+        "old history\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("portable_config/user/data/mpvBookmark.log")).unwrap(),
+        "old bookmark\n"
+    );
+    // Simulate data written while the new version is running.  Rollback must
+    // carry these records into the restored previous installation.
+    write_file(
+        root.join("portable_config/user/data/mpvHistory.log"),
+        "new history\n",
+    );
+    write_file(
+        root.join("portable_config/user/data/mpvBookmark.log"),
+        "new bookmark\n",
+    );
     assert!(previous_path(&root).is_dir());
     let status = read_status_file(&root).unwrap().unwrap();
     assert_eq!(status.state, "installed");
@@ -472,6 +499,14 @@ fn full_install_captures_edits_preserves_user_layer_and_rolls_back() {
     assert_eq!(old_conf, "volume=70\nosc=yes\n");
     assert!(!previous_path(&root).exists());
     assert!(root.join("portable_config/scripts/mine.lua").is_file());
+    assert_eq!(
+        fs::read_to_string(root.join("portable_config/user/data/mpvHistory.log")).unwrap(),
+        "new history\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("portable_config/user/data/mpvBookmark.log")).unwrap(),
+        "new bookmark\n"
+    );
 }
 
 #[test]

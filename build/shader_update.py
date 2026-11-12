@@ -4,15 +4,17 @@ import argparse
 import json
 import re
 import shutil
+import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
 from .common import (
     MANIFEST_DIR,
     SHADER_MANIFEST_SCHEMA,
+    BuildError,
     fail,
     load_manifests,
     load_yaml,
@@ -50,15 +52,19 @@ def _component_map(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
-def _split_manifest(text: str) -> tuple[str, str]:
-    """Split the manifest into its comment header and components section."""
+def _split_manifest_text(text: str, filename: str) -> tuple[str, str]:
+    """Split a manifest into its comment header and components section."""
     match = re.search(r"^components:[ \t]*$", text, flags=re.MULTILINE)
     if match is None:
-        fail(f"{SHADER_MANIFEST_FILENAME}: missing top-level components key")
+        fail(f"{filename}: missing top-level components key")
     prefix = text[: match.start()]
     if not prefix.endswith("\n"):
         prefix += "\n"
     return prefix, text[match.start() :]
+
+
+def _split_manifest(text: str) -> tuple[str, str]:
+    return _split_manifest_text(text, SHADER_MANIFEST_FILENAME)
 
 
 def _download_text(url: str) -> bytes:
@@ -97,7 +103,10 @@ def _check_license_text_unchanged(
         log(f"{identifier}: license {source_path} unchanged at {new_commit}")
 
 
-def refresh_component(component: dict[str, Any]) -> dict[str, str] | None:
+def refresh_component(
+    component: dict[str, Any],
+    validate: Callable[[str, dict[str, Any]], None] = validate_shader_component,
+) -> dict[str, str] | None:
     """Refresh one component to its upstream head.
 
     Returns ``{target: sha256}`` when the component moved and ``None`` when it
@@ -157,7 +166,7 @@ def refresh_component(component: dict[str, Any]) -> dict[str, str] | None:
         # Embedded weights are versioned with the shader files.  A separate
         # weight repository keeps its own pinned commit.
         model["source_ref"] = new_commit
-    validate_shader_component(identifier, component)
+    validate(identifier, component)
     return changed
 
 
@@ -289,7 +298,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    summary = refresh(args.manifests, check=args.check)
+    try:
+        summary = refresh(args.manifests, check=args.check)
+    except (BuildError, OSError) as error:
+        # Exit 1 is reserved for "pins changed"; a license/manifest/network
+        # failure must be distinguishable so the monthly job fails closed.
+        print(f"{error}", file=sys.stderr)
+        return 2
     if args.json:
         print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
     else:

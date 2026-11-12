@@ -32,8 +32,25 @@ fetched at build time and remain under their own upstream licenses:
   PixelClipper                 MIT
   AN3223 denoise/deband/guided LGPL-2.1-or-later (per-file headers)
   Adaptive sharpen lite        BSD-2-Clause (derived from bacondither HLSL)
+  SimpleHistory / SimpleBookmark
+                               BSD-2-Clause (Eisa01/mpv-scripts)
+  dynamic-crop                 MIT (Ashyni/mpv-scripts)
   FSRCNNX                      LGPL-3.0-or-later (declared in the shader file)
   d3dcompiler_43.dll           Microsoft DirectX redistributable
+
+SimpleHistory and SimpleBookmark are fetched at build time from
+Eisa01/mpv-scripts at the commit recorded in sources.lock.json and remain
+under BSD-2-Clause.  Their license text is shipped as
+licenses/eisa01-mpv-scripts/LICENSE.  The PlayKit-specific option files under
+portable_config/script-opts/ are project configuration, not modified upstream
+script code.
+
+dynamic-crop.lua is fetched at build time from Ashyni/mpv-scripts at the commit
+recorded in sources.lock.json and remains under MIT.  It is the original
+upstream of the dynamic crop script redistributed by dyphire/mpv-config.  Its
+license text is shipped as licenses/ashyni-dynamic-crop/LICENSE.  The
+PlayKit-specific option file portable_config/script-opts/dynamic_crop.conf only
+overrides upstream defaults and does not modify the script.
 
 The GLSL shaders are data assets, not project code.  They are fetched at build
 time from the repositories and commits recorded in sources.lock.json,

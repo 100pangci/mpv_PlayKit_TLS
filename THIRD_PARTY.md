@@ -24,14 +24,30 @@
 | PixelClipper | [Artoriuz/glsl-pixel-clipper](https://github.com/Artoriuz/glsl-pixel-clipper) | GLSL 高光裁剪 | MIT | `portable_config/shaders/ETC/PixelClipper.glsl` |
 | AN3223 denoise/deband/guided | [AN3223/dotfiles](https://github.com/AN3223/dotfiles) | GLSL nlmeans、hdeband、guided（14 文件） | LGPL-2.1-or-later（逐文件头） | `portable_config/shaders/nlmeans/`, `Deband/`, `guided/` |
 | Adaptive sharpen lite | [hooke007/mpv_PlayKit](https://github.com/hooke007/mpv_PlayKit) | GLSL 自适应锐化（3 文件） | BSD-2-Clause（派生自 bacondither HLSL） | `portable_config/shaders/Adaptive_sharpen/` |
+| SimpleHistory / SimpleBookmark | [Eisa01/mpv-scripts](https://github.com/Eisa01/mpv-scripts) | 播放历史与书签 | BSD-2-Clause | `portable_config/scripts/SimpleHistory.lua`, `portable_config/scripts/SimpleBookmark.lua` |
+| dynamic-crop | [Ashyni/mpv-scripts](https://github.com/Ashyni/mpv-scripts) | 动态黑边检测与裁切 | MIT | `portable_config/scripts/dynamic_crop.lua` |
 | FSRCNNX | [igv/FSRCNN-TensorFlow](https://github.com/igv/FSRCNN-TensorFlow) | GLSL 亮度放大（1 文件） | LGPL-3.0-or-later（文件内声明；源码仓库 MIT） | `portable_config/shaders/FSRCNNX/FSRCNNX_x2_16_0_4_1.glsl` |
+
+`SimpleHistory.lua` 和 `SimpleBookmark.lua` 不提交到本仓库，而是由
+`manifests/scripts.yml` 固定到 `Eisa01/mpv-scripts` 的完整 commit，经
+`build.resolve` / `build.fetch` 下载并校验 SHA-256；其 BSD-2-Clause 许可证原文
+随包放在 `licenses/eisa01-mpv-scripts/LICENSE`。本项目只在
+`config/common/script-opts/` 中提供路径和快捷键覆盖，不修改上游脚本。
+
+`dynamic_crop.lua` 同样不提交到本仓库。它是 `Ashyni/mpv-scripts` 的原始上游
+实现（`dyphire/mpv-config` 中的同名文件只是副本），由 `manifests/scripts.yml`
+固定到完整 commit 并按 SHA-256 校验。MIT 许可证原文随包放在
+`licenses/ashyni-dynamic-crop/LICENSE`；PlayKit 的
+`config/common/script-opts/dynamic_crop.conf` 只覆盖默认值（默认按需启用），
+不修改上游脚本。
 
 `d3dcompiler_43.dll` 是 Microsoft DirectX 的可再分发组件，不是 mpv 或本项目的
 GPL 代码；它由 shinchiro 的 Windows 构建附带，按 Microsoft 的 DirectX
 可再分发条款随包提供。
 
 本项目自己的 Lua（`idle-brand`、`save_global_props`、`input_plus`、`thumbfast`、
-`update-check`）为原创实现，按仓库 **GPL-3.0-or-later** 分发，不属于第三方组件。
+`screenshot_tools`、`pip`、`update-check`）为原创实现，按仓库
+**GPL-3.0-or-later** 分发，不属于第三方组件。
 缩略图功能不包含历史 `thumb_engine` 或第三方 thumbfast 的代码。
 
 空闲画面的 mpv 徽标造型与配色来自 mpv 的 `player/lua/osc.lua`（mpv 项目，
@@ -63,6 +79,8 @@ licenses/
   acnet/LICENSE
   adaptive-sharpen-lite/BSD-2-Clause.txt
   aiupscale/LICENSE
+  eisa01-mpv-scripts/LICENSE                # SimpleHistory / SimpleBookmark
+  ashyni-dynamic-crop/LICENSE               # dynamic-crop
   an3223-denoise/LGPL-2.1-or-later.txt
   anime4k-gan/LICENSE
   anime4k-v4/LICENSE

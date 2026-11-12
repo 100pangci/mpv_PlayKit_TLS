@@ -31,7 +31,25 @@ VapourSynth 与 AI 滤镜不进入本发行版；少量许可证、来源明确�
 | `save_global_props.lua` | 保存/恢复音量与静音 | 本项目原创 |
 | `input_plus.lua` | 按键名检测、信息面板、导入、设备/轨道/章节工具、播放列表、速度与 AB 并轨 | 本项目原创 |
 | `thumbfast.lua` | uosc 时间轴缩略图 | 本项目原创，干净实现 |
+| `screenshot_tools.lua` | 截图模式、区域裁剪、连拍与拼接 | 本项目原创 |
+| `pip.lua` | 画中画窗口控制 | 本项目原创 |
+| `dynamic_crop.lua`（构建时下载，不在 `scripts/local/`） | 动态黑边检测与裁切 | [Ashyni/mpv-scripts](https://github.com/Ashyni/mpv-scripts) 上游（MIT），dyphire/mpv-config 同名脚本的原始上游；PlayKit 只覆盖选项 |
 | `update-check.lua` | GitHub Release 更新提示 | 本项目原创 |
+
+播放历史与书签不复制任何基线代码，而是使用上游
+[Eisa01/mpv-scripts](https://github.com/Eisa01/mpv-scripts) 的
+`SimpleHistory.lua` / `SimpleBookmark.lua`（BSD-2-Clause）。两者由
+`manifests/scripts.yml` 固定到完整 commit，构建时下载并由 `sources.lock.json`
+校验 SHA-256；包内同时提供上游许可证文本。PlayKit 只通过
+`script-opts/SimpleHistory.conf` 与 `SimpleBookmark.conf` 覆盖数据路径和按键，
+不修改上游脚本。其日志写入 `portable_config/user/data/`，由更新器保留。
+
+动态裁切同样不复制基线代码，而是使用上游
+[Ashyni/mpv-scripts](https://github.com/Ashyni/mpv-scripts) 的
+`dynamic-crop.lua`（MIT）。dyphire/mpv-config 分发的同名脚本是它的下游副本；
+本仓库直接固定 Ashyni 的提交，构建时下载并校验 SHA-256。PlayKit 只提供
+`script-opts/dynamic_crop.conf` 覆盖默认值，`build.script_update` 每月刷新
+commit 与文件哈希，并在许可证文本或脚本头标记变化时要求人工复核。
 
 `thumbfast.lua` 不包含历史 `thumb_engine` 或第三方 thumbfast 的代码。它按 uosc
 5.13 的公开消息协议工作：
@@ -82,8 +100,9 @@ PowerShell、Python 或其他外部解释器；AB 并轨只使用 mpv 的
 - `self-updater`、`get-yt-dlp` 两类 AppImage hook；
 - `_cache/`、`saved-props.json`、`update-check-state.json` 等运行时状态。
 
-`input_plus.lua`、`thumbfast.lua`、`idle-brand.lua` 和 `save_global_props.lua`
-是本项目允许的本地脚本，不属于禁用路径。
+`input_plus.lua`、`thumbfast.lua`、`idle-brand.lua`、`save_global_props.lua`、
+`screenshot_tools.lua`、`pip.lua`、构建时获取的 `dynamic_crop.lua` 以及
+`SimpleHistory.lua` / `SimpleBookmark.lua` 是本项目允许的本地脚本，不属于禁用路径。
 
 ## 新增本地脚本的规则
 

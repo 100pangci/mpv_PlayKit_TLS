@@ -5,6 +5,63 @@ schema: 1
 # automatic UI scale.  All other uosc files remain upstream; see THIRD_PARTY.md.
 # Local scripts live in scripts/local/ instead.
 components:
+  # Eisa01's history and bookmark scripts are fetched as immutable raw files
+  # and pinned to one upstream commit.  Their repository declares BSD-2-Clause;
+  # build.script_update refreshes the commit/file hashes and refuses to accept
+  # a changed license text automatically.  PlayKit ships its own overrides in
+  # config/common/script-opts/ so the data paths and key bindings fit this
+  # distribution.
+  - id: eisa01-mpv-scripts
+    kind: raw-files
+    platforms: all
+    upstream: Eisa01/mpv-scripts
+    ref: b9e63743a858766c9cc7a801d77313b0cecdb049
+    version: "2025-06-21"
+    update:
+      mode: latest-commit
+      license_marker: "BSD 2-Clause License"
+    files:
+      - source: scripts/SimpleHistory.lua
+        target: portable_config/scripts/SimpleHistory.lua
+        sha256: 1cbaf6dc3855ebb4b7f92a69c48ba6b704b19585eaa3ee180e84dfa66f2d0520
+        license: BSD-2-Clause
+      - source: scripts/SimpleBookmark.lua
+        target: portable_config/scripts/SimpleBookmark.lua
+        sha256: 5bfd416814b7a85e8c6dd5d461a28f93d29379acf3b47fb97f80e52a0e7157b8
+        license: BSD-2-Clause
+    license:
+      spdx: BSD-2-Clause
+      files:
+        - path: LICENSE
+          license: BSD-2-Clause
+          repository: Eisa01/mpv-scripts
+          ref: b9e63743a858766c9cc7a801d77313b0cecdb049
+
+  # Ashyni's dynamic-crop.lua is the original upstream of the script bundled by
+  # dyphire/mpv-config (MIT).  It is fetched at build time and pinned to one
+  # commit; PlayKit ships only option overrides that keep the default disabled.
+  - id: ashyni-dynamic-crop
+    kind: raw-files
+    platforms: all
+    upstream: Ashyni/mpv-scripts
+    ref: d3f5685f5209ae548f8398b21d4dcbbea766d076
+    version: "2024-09-14"
+    update:
+      mode: latest-commit
+      license_marker: "This script uses the lavfi cropdetect filter"
+    files:
+      - source: dynamic-crop.lua
+        target: portable_config/scripts/dynamic_crop.lua
+        sha256: 332f314b324617d7038c00c3ada08d257160e10766c801800dbdea325fe11022
+        license: MIT
+    license:
+      spdx: MIT
+      files:
+        - path: LICENSE
+          license: MIT
+          repository: Ashyni/mpv-scripts
+          ref: d3f5685f5209ae548f8398b21d4dcbbea766d076
+
   - id: uosc
     kind: archive
     platforms: all

@@ -23,7 +23,14 @@ from .common import (
 )
 from .extract import DEFAULT_REMOVED_HOOKS, hook_is_removed
 from .shaders import load_shader_audit, shader_targets
-from .userstate import verify_package_state
+from .userstate import (
+    USER_DATA_DIR,
+    USER_DATA_LOGS,
+    USER_DATA_README,
+    verify_package_state,
+)
+
+PACKAGE_USER_DATA_README = f"portable_config/{USER_DATA_README}"
 
 REQUIRED = [
     "portable_config/mpv.conf",
@@ -37,6 +44,14 @@ REQUIRED = [
     "portable_config/scripts/idle-brand.lua",
     "portable_config/scripts/input_plus.lua",
     "portable_config/scripts/thumbfast.lua",
+    "portable_config/scripts/screenshot_tools.lua",
+    "portable_config/scripts/dynamic_crop.lua",
+    "portable_config/scripts/SimpleHistory.lua",
+    "portable_config/scripts/SimpleBookmark.lua",
+    "portable_config/script-opts/SimpleHistory.conf",
+    "portable_config/script-opts/SimpleBookmark.conf",
+    "portable_config/script-opts/screenshot_tools.conf",
+    "portable_config/script-opts/dynamic_crop.conf",
     "portable_config/fonts/LXGWWenKaiMonoLite-Regular.ttf",
     "portable_config/.playkit/state.json",
     "portable_config/.playkit/official/mpv.conf",
@@ -48,6 +63,7 @@ REQUIRED = [
     "portable_config/.playkit/generated/profiles.conf",
     "portable_config/.playkit/generated/platform.conf",
     "portable_config/user/README.md",
+    PACKAGE_USER_DATA_README,
     "playkit-inventory.json",
     "manifest.json",
     "playkit-version.json",
@@ -90,6 +106,8 @@ LINUX_REQUIRED = [
 REQUIRED_LICENSES = {
     "windows-x64": [
         "licenses/lxgw-wenkai-mono-lite/OFL.txt",
+        "licenses/eisa01-mpv-scripts/LICENSE",
+        "licenses/ashyni-dynamic-crop/LICENSE",
         "licenses/mpv-windows/LICENSE.GPL",
         "licenses/mpv-windows/LICENSE.LGPL",
         "licenses/uosc/LICENSE.LGPL",
@@ -101,6 +119,8 @@ REQUIRED_LICENSES = {
     ],
     "linux-x64": [
         "licenses/lxgw-wenkai-mono-lite/OFL.txt",
+        "licenses/eisa01-mpv-scripts/LICENSE",
+        "licenses/ashyni-dynamic-crop/LICENSE",
         "licenses/mpv-linux/LICENSE",
         "licenses/mpv-linux/LICENSE.GPL",
         "licenses/mpv-linux/LICENSE.LGPL",
@@ -123,6 +143,9 @@ FORBIDDEN_PARTS = {
     "update-check-state.json",
     "update-status.json",
     "updater.log",
+    # Runtime history/bookmark logs live in portable_config/user/data/ and are
+    # preserved by the updater; they must never be shipped in a package.
+    *USER_DATA_LOGS,
 }
 FORBIDDEN_SUFFIXES = {".vpy", ".onnx"}
 FORBIDDEN_PARTS_FOLDED = frozenset(part.casefold() for part in FORBIDDEN_PARTS)
@@ -138,6 +161,21 @@ def _declared_shader(path: str, allowed: set[str]) -> bool:
     )
 
 
+def _user_data_relative(path: str) -> str | None:
+    """Return the member path below portable_config/user/data/, if any."""
+    normalized = path.replace("\\", "/")
+    parts = [part for part in normalized.split("/") if part and part != "."]
+    marker = tuple(part.casefold() for part in Path(USER_DATA_DIR).parts)
+    for index, part in enumerate(parts):
+        if part.casefold() != "portable_config":
+            continue
+        start = index + 1
+        end = start + len(marker)
+        if tuple(part.casefold() for part in parts[start:end]) == marker:
+            return "/".join(parts[end:])
+    return None
+
+
 def check_forbidden(
     path: str, allowed_shaders: set[str] | None = None, *, is_dir: bool = False
 ) -> None:
@@ -146,6 +184,14 @@ def check_forbidden(
     for part in parts:
         if part.casefold() in FORBIDDEN_PARTS_FOLDED:
             fail(f"forbidden path in package: {path}")
+    relative_user_data = _user_data_relative(path)
+    if relative_user_data is not None:
+        # Only the documentation placeholder is shipped.  Runtime logs and any
+        # future user-data files are created/migrated locally by the updater.
+        if is_dir and relative_user_data:
+            fail(f"nested user data directory in package: {path}")
+        if not is_dir and relative_user_data.casefold() != "readme.md":
+            fail(f"runtime user data file in package: {path}")
     suffix = Path(path).suffix.lower()
     if suffix == ".glsl":
         # Shader assets are allowed only at the exact targets declared in

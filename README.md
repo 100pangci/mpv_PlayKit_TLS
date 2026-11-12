@@ -21,6 +21,12 @@ profiles、截图、yt-dlp 在线播放和播放器内更新检测。所有历�
   AN3223 nlmeans/guided/hdeband、Adaptive sharpen、FSRCNNX（代码与模型/数据
   许可证分别记录，逐文件见 `docs/shader-license-audit.md`）
 - Rust `umpv` 单实例启动器：多个文件交给同一个 mpv 窗口，Windows/Linux 共用一套源码
+- 播放历史与书签：构建时固定上游提交的 SimpleHistory / SimpleBookmark，数据保存在
+  用户层并在更新、回滚后保留
+- 截图增强：原创的截图模式、区域裁剪、连拍与图片拼接
+- 画中画：原创的窗口角落缩放与完整窗口状态恢复
+- 动态裁切：构建时固定 [Ashyni/mpv-scripts](https://github.com/Ashyni/mpv-scripts)
+  的 `dynamic-crop.lua`（MIT），默认按需启用
 - 纯净/测试/跑分模式启动器（`installer/modes/`），用于隔离配置问题和基准测试
 - 播放器内自动更新：Rust 更新器负责下载、校验、patch 和事务式替换
 - 用户配置 patch 层（`portable_config/user/`），更新时自动重新应用
@@ -40,6 +46,20 @@ CC BY-NC-SA 4.0，k7/QCOM/ESPCN/LUT/Shadertoy 等来源或授权不明）。这�
 本项目仅参考其功能与配置结构，历史 PlayKit Lua 未复制进仓库；凡入选的功能均由
 本项目原创实现，或改用官方上游实现（逐项见 `docs/lua-disposition.md`、
 `LICENSE_PROVENANCE.md`）。
+
+播放历史与书签直接复用 [Eisa01/mpv-scripts](https://github.com/Eisa01/mpv-scripts)
+的 SimpleHistory / SimpleBookmark，版权归 Eisa AlAwadhi 所有，许可证为
+BSD-2-Clause；完整许可证文本随包放在 `licenses/eisa01-mpv-scripts/LICENSE`。
+本项目未修改上游脚本源码，只添加了 `script-opts` 选项覆盖。
+
+动态裁切直接复用 [Ashyni/mpv-scripts](https://github.com/Ashyni/mpv-scripts) 的
+`dynamic-crop.lua`（MIT）。它是 dyphire/mpv-config 中同名脚本的原始上游，构建时
+按固定提交下载并校验 SHA-256，完整许可证文本随包放在
+`licenses/ashyni-dynamic-crop/LICENSE`。截图增强与画中画为本项目原创实现。
+
+功能规划还参考了 [dyphire/mpv-config](https://github.com/dyphire/mpv-config) 等社区
+配置；动态裁切已确认其原始上游为 Ashyni/mpv-scripts。感谢这些项目及其作者的
+开源分享。
 
 ## 下载与使用
 
@@ -63,6 +83,92 @@ CC BY-NC-SA 4.0，k7/QCOM/ESPCN/LUT/Shadertoy 等来源或授权不明）。这�
 `portable_config/` 是完整配置目录。第三方组件的许可证原文位于包内 `licenses/`，
 `licenses/INDEX.json` 记录每个文件的来源和 SHA-256。
 
+## 播放增强
+
+### 播放历史与书签
+
+播放历史与书签使用上游 [Eisa01/mpv-scripts](https://github.com/Eisa01/mpv-scripts)
+的 `SimpleHistory` 与 `SimpleBookmark`（BSD-2-Clause）。两者在构建时按
+`sources.lock.json` 固定的提交下载并校验 SHA-256，不复制进本仓库；PlayKit 只
+提供 `config/common/script-opts/` 下的选项覆盖。数据写入
+`portable_config/user/data/`，自动更新和回滚都会保留。
+
+| 按键 | 功能 |
+| --- | --- |
+| `Ctrl+Alt+H` | 打开播放历史列表 |
+| `Ctrl+Alt+R` | 从历史记录继续上次进度 |
+| `Alt+R` | 打开上次播放的文件 |
+| `Ctrl+Shift+I` | 切换隐私模式（本次会话不写入历史） |
+| `Ctrl+B` | 为当前位置添加书签 |
+| `Alt+B` | 添加文件书签（不带时间点） |
+| `B` | 打开书签列表 |
+| `Ctrl+Alt+1` | 打开“收藏”书签分组 |
+
+历史的自动恢复已关闭（`resume_option=none`），默认仍由 mpv 的 `watch_later`
+恢复进度，避免重复恢复；需要从历史恢复时使用上表的手动命令。书签加载也不会
+写入 watch-later（`preserve_video_settings=no`），因此不会与 `watch_later` 和
+`save_global_props` 的进度/属性恢复互相覆盖。历史列表支持
+搜索、删除条目和跳转；路径失效的条目仍保留在日志中，打开时由 mpv 给出错误，
+可在列表中删除。上游脚本没有 `enabled` 选项；如需完全关闭，删除或重命名
+`portable_config/scripts/SimpleHistory.lua`（或 `SimpleBookmark.lua`）。历史与
+书签的列表、过滤和隐私选项见对应的 `script-opts` 文件及上游文档。
+
+### 截图增强
+
+`scripts/local/screenshot_tools.lua` 是原创实现，不依赖基线代码。原生的
+`Ctrl+S`（窗口-无字幕/OSD）和 `Ctrl+Shift+S`（窗口）保持不变，新增：
+
+| 按键 | 功能 |
+| --- | --- |
+| `Alt+s` | 区域截图（区域来自 `region=x:y:w:h`，可覆盖字幕区域） |
+| `Ctrl+Alt+s` | 连续截图（默认 5 张、间隔 1 秒） |
+| `Ctrl+Alt+t` | 把最近一次连拍拼接成一张长图 |
+| `Ctrl+Alt+c` | 取消当前截图、连拍或拼接任务 |
+
+截图模式为 `video`（不含字幕/OSD）、`subtitles`（含字幕、不含 OSD）或
+`window`（含字幕与 OSD）。默认输出到 `portable_config/user/screenshots/`，
+支持 png/jpg/webp，质量沿用 mpv 当前的 `screenshot-*` 属性；区域截图通过临时
+`video-crop` 实现并在完成后恢复用户原值。连拍记录写入
+`portable_config/user/screenshot-tools/queue.jsonl`。拼接优先调用随包 mpv
+子进程，失败或缺失时回退到 PATH 中的 `ffmpeg`；两者都不可用时只提示失败，
+不会留下半成品。截图与队列位于用户层，自动更新和回滚会保留。全部选项见
+`script-opts/screenshot_tools.conf`。
+
+### 画中画
+
+`scripts/local/pip.lua` 是原创实现，只使用 mpv 自身的窗口属性，不调用平台窗口
+API，Windows 与 Linux 共用同一份逻辑。按 `Alt+p` 或选择原生菜单
+“视频 > 切换 画中画”即可进入或退出。
+
+进入时默认把窗口缩放到屏幕右下角，宽度为屏幕的 25%，与边缘间距 16 像素，临时
+置顶并去掉边框；退出时按相反顺序恢复进入前的 `geometry`、`autofit`、
+`autofit-larger`、`autofit-smaller`、`window-scale`、`window-maximized`、
+`keepaspect-window`、`border`、`ontop` 和 `fullscreen`。若进入前是全屏，默认先
+退出全屏，退出画中画后再恢复全屏。
+
+配置位于 `script-opts/pip.conf`：`position`（四个角落）、`width_percent`、
+`height_percent`（0 表示按视频宽高比计算）、`margin`、`min_width`、`ontop`、
+`border`、`exit_fullscreen`、`follow_display`（显示器/DPI 变化时重新定位）、
+`keep_on_new_file`（切换视频时重新计算大小）和 `toggle_keybind`。写入失败或某些
+VO 不支持定位时会跳过对应属性，不会把窗口留在半配置状态。Wayland 合成器可能
+忽略绝对窗口位置，此时仍会应用大小与置顶设置，但角落位置由合成器决定。
+
+### 动态裁切
+
+动态裁切使用上游 [Ashyni/mpv-scripts](https://github.com/Ashyni/mpv-scripts) 的
+`dynamic-crop.lua`（MIT），构建时按 `sources.lock.json` 固定的提交下载到
+`portable_config/scripts/` 并校验 SHA-256，不复制进本仓库。PlayKit 只提供
+`script-opts/dynamic_crop.conf` 选项覆盖，默认 `mode=1`（按需启用），加载后不插入
+滤镜、不修改 `video-crop`。
+
+按 `Alt+c`（上游自身的 `Shift+C` 也保留）或选择原生菜单
+“视频 > 切换 动态裁切”：第一次切换启用 cropdetect 并在结果稳定后应用裁切，
+第二次移除裁切，第三次恢复上次裁切并继续检测。`crop_method=1` 使用 mpv 的
+`video-crop` 属性，不向用户 `vf` 链插入滤镜，因此 GLSL shader、字幕和手动滤镜
+保持原样；切换过程中不会删除用户的 `vf`。检测要求 `hwdec=no` 或 `*-copy`，本
+发行版默认的 `auto-copy` 满足要求。`detect_limit`、`fast_change_timer`、
+`ratio_timer`、`prevent_change_*` 等参数见 `dynamic_crop.conf` 与上游文件头说明。
+
 ## 更新策略
 
 GitHub Actions 每月 1 日 05:17 UTC 检查上游，采用事务式流程：
@@ -82,6 +188,8 @@ GitHub Actions 每月 1 日 05:17 UTC 检查上游，采用事务式流程：
 上游组合**，而不是未经验证的自动解析结果。任一环节失败都会停止发布。
 
 - 上游和仓库输入都没有变化时不创建空 Release；`force` 手动触发仍可强制发布。
+- 手动触发月度工作流时可勾选 `draft`，本次 Release 以草稿形式创建，便于先检查
+  两个平台的资产和发布说明，再在 Releases 页面手动发布；定时任务仍直接发布。
 - 版本号采用 `年.月`，同月多次发布时追加 `.1`、`.2`。
 - `sources.lock.json` 固定每个上游资产的版本、URL 与 SHA-256；许可证文本也固定到
   上游仓库的完整 commit 与 SHA-256，下载 URL 不使用 `main`/`master`/`latest`。

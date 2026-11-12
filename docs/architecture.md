@@ -13,7 +13,7 @@
 | `config/windows/` | `platform.conf`（WASAPI、IME）与 `ytdl_hook.conf` |
 | `config/linux/` | `platform.conf`（PipeWire/PulseAudio/ALSA）与 `ytdl_hook.conf` |
 | `config/umpv/` | 单实例启动器配置；构建时复制为包根 `umpv.conf` |
-| `scripts/local/` | 本项目原创 Lua（`idle-brand`、`save_global_props`、`input_plus`、`thumbfast`）；构建时复制到包内 `portable_config/scripts/` 根目录 |
+| `scripts/local/` | 本项目原创 Lua（`idle-brand`、`save_global_props`、`input_plus`、`thumbfast`、`screenshot_tools`、`pip`）；构建时复制到包内 `portable_config/scripts/` 根目录。`SimpleHistory`、`SimpleBookmark`、`dynamic_crop` 不在此目录，由 `manifests/scripts.yml` 在构建时下载 |
 | `updater/update-check.lua` | 播放器内更新检测与安装界面；构建时同样复制到 scripts 根目录 |
 | `updater/helper/` | Rust 更新器与 umpv 单实例启动器（下载、校验、patch、事务交换）；构建时分别放入安装目录根部 `updater/` 和包根 |
 | `installer/` | Windows 安装/卸载与 umpv 注册脚本、图标；Linux 安装接口占位（未实现）；`modes/` 提供纯净/测试/跑分启动器；构建时原样复制到包内 |
@@ -31,6 +31,8 @@ manifests/*.yml
       ▼
 build.shader_update ── 仅月度：按 update.mode 移动 shader pin
       │                  (许可证文本/marker 变化时 fail-closed)
+build.script_update ── 仅月度：用同一规则移动 scripts.yml 的 Lua pin
+      │                  (文件哈希、许可证文本/marker 同样校验)
       ▼
 build.resolve ── GitHub Releases API ──► 候选 sources.lock.json
       │                                   (版本、URL、sha256、许可证 commit/sha256)
@@ -75,10 +77,12 @@ gh release create --target <final_sha> ── 仅在此前全部成功时执行
 月度工作流的核心约束是：**main 中的 `sources.lock.json` 只能代表已经通过完整
 双平台构建验证的上游组合**。
 
-resolve job 在生成候选 lock 前先运行 `build.shader_update`：它按
-`manifests/shaders.yml` 的 `update.mode` 把 `latest-commit`/`latest-tag` 组件移动
-到新的完整 commit，刷新文件哈希和 `manifests/shader-audit.json`，并拒绝任何
-已声明文件缺失、同仓库许可证文本变化或 `license_marker` 消失的上游改动。刷新后的
+resolve job 在生成候选 lock 前先运行 `build.shader_update` 和
+`build.script_update`：前者按 `manifests/shaders.yml` 的 `update.mode` 把
+`latest-commit`/`latest-tag` 组件移动到新的完整 commit，刷新文件哈希和
+`manifests/shader-audit.json`；后者用同一套 raw-files 规则刷新
+`manifests/scripts.yml` 中的 `latest-commit` Lua 组件。两者都会拒绝任何已声明
+文件缺失、同仓库许可证文本变化或 `license_marker` 消失的上游改动。刷新后的
 manifest 与 lock 一起进入候选提交；因此双平台构建验证的仍是最终要提交的 pin，
 而不是只在 job 内临时改动的版本。
 
@@ -117,7 +121,10 @@ manifest 与 lock 一起进入候选提交；因此双平台构建验证的仍�
    `staging → current`。失败时尝试恢复；成功后最多保留 current 与 previous。
 
 `.playkit/official/` 保存本版本官方配置基线，`.playkit/generated/` 保存应用
-patch 后最后写入的快照，二者用于捕获用户直接编辑和校验状态。用户 patch 是
+patch 后最后写入的快照，二者用于捕获用户直接编辑和校验状态。`user/data/` 保存
+历史、书签等运行时数据，`user/screenshots/` 与 `user/screenshot-tools/` 保存
+截图和连拍队列；发行包只包含 `user/data/README.md` 占位，安装、修复和回滚都会
+保留这些用户子树，回滚前先把当前数据合并回 `.previous`。用户 patch 是
 语义差异（键操作和 schema 2 行操作），不是 unified diff；未出现在 patch 中的
 键跟随新官方配置。schema 2 文件放在 `user/patches/v2/`，自动 patch 放在
 `user/patches/auto/v2/`，旧 helper 会忽略这些子目录。`state.json` 还记录

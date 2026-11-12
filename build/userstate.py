@@ -10,6 +10,9 @@ from .common import fail, log, read_json, sha256_file, write_json
 MANAGED_ROOT_FILES = ("mpv.conf", "input.conf", "profiles.conf", "platform.conf")
 STATE_SCHEMA = 1
 INVENTORY_SCHEMA = 1
+USER_DATA_DIR = "user/data"
+USER_DATA_README = f"{USER_DATA_DIR}/README.md"
+USER_DATA_LOGS = ("mpvHistory.log", "mpvBookmark.log")
 
 USER_README = """mpv PlayKit 用户层
 ===================
@@ -90,11 +93,30 @@ user/patches/auto/v2/ 下，并在应用新官方配置后重新应用。同一�
 
 同一个文件名如果和官方文件冲突，更新会中止。请换一个名字。
 
+历史、书签与运行时数据
+----------------------
+以下日志由播放器的历史/书签脚本在运行时写入：
+    portable_config/user/data/mpvHistory.log     播放历史
+    portable_config/user/data/mpvBookmark.log    播放书签
+
+user/data/ 整个子树会在更新和回滚时保留：安装会把当前数据迁移到新版本，
+回滚前也会把当前数据合并回上一个版本，因此更新或回滚不会丢失历史与书签。
+这些日志不属于官方配置，更新器不会用新包覆盖或删除它们。发行包只包含
+portable_config/user/data/README.md 作为目录占位和说明，不会包含上述日志或
+其他运行时状态；不要把日志手动放进发行包。需要清空数据时，删除对应的日志
+文件即可。
+
+截图增强的输出与连拍队列也在用户层：
+    portable_config/user/screenshots/                  截图文件
+    portable_config/user/screenshot-tools/queue.jsonl  连拍记录
+安装更新和回滚时同样会保留这两个目录。
+
 更新与回滚
 ----------
 播放器菜单“更新”中提供检查、下载安装、保存当前修改和回滚。安装由独立的
 updater 进程完成：它先下载并校验完整安装包，等待播放器退出，再把新版本
-放到当前目录、把旧版本保留为 <安装目录>.previous。回滚会交换这两个目录。
+放到当前目录、把旧版本保留为 <安装目录>.previous。回滚会交换这两个目录，
+并在交换前把当前 user/data/ 中的历史与书签数据合并回上一个版本。
 
 日志和状态
 ----------
@@ -149,6 +171,18 @@ SCRIPT_OPTS_README = """用户 script-opts
 user/patches/script-opts/<name>.conf.patch。
 """
 
+DATA_README = """用户运行时数据
+==============
+
+这个目录保存播放器在运行时产生的历史与书签数据：
+    user/data/mpvHistory.log     播放历史
+    user/data/mpvBookmark.log    播放书签
+
+更新器会保留整个 user/data/ 子树：安装更新时把现有数据迁移到新版本，回滚前
+再把当前数据合并回上一个版本。发行包只包含本说明文件作为目录占位，不会包含
+上述日志或其他运行时状态。删除对应日志文件即可清空该部分数据。
+"""
+
 
 def managed_configs(portable: Path) -> list[str]:
     result = [name for name in MANAGED_ROOT_FILES if (portable / name).is_file()]
@@ -167,6 +201,7 @@ def _write_user_docs(portable: Path) -> None:
         "scripts/README.md": SCRIPTS_README,
         "fonts/README.md": FONTS_README,
         "script-opts/README.md": SCRIPT_OPTS_README,
+        "data/README.md": DATA_README,
     }
     for relative, text in files.items():
         path = portable / "user" / relative

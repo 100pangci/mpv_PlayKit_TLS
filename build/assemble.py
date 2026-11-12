@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import stat
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from .common import (
     MANIFEST_DIR,
     PLATFORM_OS,
     ROOT,
+    SHADER_MANIFEST,
     copy_file,
     copy_tree,
     fail,
@@ -26,6 +28,7 @@ from .common import (
     remove_tree,
     sha256_file,
     shader_manifest_fields,
+    validate_raw_target,
     write_json,
 )
 from .extract import DEFAULT_REMOVED_HOOKS, extract_component, hook_is_removed
@@ -160,7 +163,7 @@ def install_raw_component(
     fetched: dict[str, Any],
     work: Path,
 ) -> None:
-    """Install manifest-declared raw files (GLSL shaders) into their targets."""
+    """Install manifest-declared raw files into their declared targets."""
     identifier = component["id"]
     declared = {
         str(item.get("target")): str(item.get("sha256"))
@@ -172,17 +175,40 @@ def install_raw_component(
     }
     if fetched_files != declared:
         fail(f"{identifier}: fetched raw files differ from manifest")
+    shader_only = component.get("_manifest") == SHADER_MANIFEST
     for item in fetched.get("files", []):
-        target = stage / item["target"]
-        if not str(item["target"]).startswith("portable_config/shaders/"):
-            fail(f"{identifier}: raw target escapes the shader directory: {item['target']}")
-        source = work / item["local_path"]
-        if not source.is_file():
-            fail(f"{identifier}: fetched raw file is missing: {source}")
-        if sha256_file(source) != item.get("sha256"):
-            fail(f"{identifier}: fetched raw file hash changed: {item['target']}")
+        target_name = str(item.get("target") or "")
+        # Re-run the same policy the manifest loader applied.  The fetched
+        # record must name its source as well, so a tampered work directory
+        # cannot turn a data file into a script.
+        policy = validate_raw_target(
+            str(item.get("source") or ""),
+            target_name,
+            identifier,
+            shader_only=shader_only,
+        )
+        if policy is None:
+            fail(f"{identifier}: unsupported raw file target: {target_name}")
+        target = (stage / target_name).resolve()
+        stage_root = stage.resolve()
+        if target == stage_root or not str(target).startswith(str(stage_root) + os.sep):
+            fail(f"{identifier}: raw target escapes the package: {target_name}")
+        local_path = Path(str(item.get("local_path") or ""))
+        if not str(item.get("local_path")) or local_path.is_absolute() or ".." in local_path.parts:
+            fail(f"{identifier}: unsafe fetched raw path: {item.get('local_path')!r}")
+        source = (work / local_path).resolve()
+        work_root = work.resolve()
+        if not str(source).startswith(str(work_root) + os.sep) or not source.is_file():
+            fail(f"{identifier}: fetched raw file is missing or unsafe: {local_path}")
+        digest = str(item.get("sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            fail(f"{identifier}: raw file has no lowercase sha256: {target_name}")
+        if sha256_file(source) != digest:
+            fail(f"{identifier}: fetched raw file hash changed: {target_name}")
         copy_file(source, target)
-        log(f"installed {identifier}: {item['target']}")
+        if sha256_file(target) != digest:
+            fail(f"{identifier}: installed raw file hash changed: {target_name}")
+        log(f"installed {identifier}: {target_name}")
 
 
 def copy_configuration(stage: Path, platform: str) -> None:
@@ -445,6 +471,7 @@ def verify_stage_minimum(stage: Path, platform: str) -> None:
         portable / ".playkit" / "official" / "platform.conf",
         portable / ".playkit" / "generated" / "mpv.conf",
         portable / "user" / "README.md",
+        portable / "user" / "data" / "README.md",
         stage / "updater" / helper_filename(platform),
         stage / "LICENSE",
         stage / "NOTICE",

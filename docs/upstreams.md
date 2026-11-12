@@ -34,7 +34,7 @@
 - 若上游改变资产命名，解析会失败而不是悄悄使用旧文件；需要更新
   `manifests/*.yml` 的正则后重新生成 lock。
 
-## 原始文件（GLSL）
+## 原始文件（GLSL、Lua 与配置）
 
 `kind: raw-files` 用于没有 Release 资产、但需要固定到某个上游提交的文件：
 
@@ -80,6 +80,36 @@
 该组件 `license.files` 中同 SPDX id 的许可证文本；`build.verify` 会检查它出现在
 包内 `licenses/<component>/` 且哈希与 `licenses/INDEX.json` 一致。
 
+`kind: raw-files` 也用于固定上游 Lua 脚本和 script-opts 配置，例如播放历史与书签：
+
+```yaml
+- id: eisa01-mpv-scripts
+  kind: raw-files
+  platforms: all
+  upstream: Eisa01/mpv-scripts
+  ref: "b9e63743a858766c9cc7a801d77313b0cecdb049"
+  version: "2025-06-21"
+  update:
+    mode: latest-commit
+    license_marker: "BSD 2-Clause License"
+  files:
+    - source: scripts/SimpleHistory.lua
+      target: portable_config/scripts/SimpleHistory.lua
+      sha256: <64 位小写十六进制>
+      license: BSD-2-Clause
+```
+
+目标路径只有三种合法形态：
+
+- `.glsl`/`.hook` 源文件 → `portable_config/shaders/` 下的 `.glsl`；
+- `.lua` 源文件 → `portable_config/scripts/` 的直接子文件；
+- `.conf` 源文件 → `portable_config/script-opts/` 的直接子文件。
+
+不允许子目录（避免覆盖 `scripts/uosc/` 等由其他组件拥有的文件）、绝对路径或
+`..`。构建时 `build.assemble` 会再次执行同一策略，防止被篡改的 fetch 目录把
+数据文件写成脚本。Lua 脚本必须自带上游许可证头，且 `license_marker` 要在文件
+中匹配；同仓库许可证文本变化时更新会失败并要求人工复核。
+
 ### 跟随上游更新
 
 `update.mode` 决定月度工作流如何移动 pin：
@@ -89,8 +119,9 @@
 - `pinned`：不自动移动。GAN 旧分支、GPL release 资产和需要人工复核的组件使用。
 
 `python -m build.shader_update`（monthly workflow 的 resolve job 首先执行）只刷新
-已声明的文件：任何文件缺失、同仓库许可证文本变化或 `update.license_marker`
-消失都会失败并要求人工审计。刷新结果同时更新
+shader manifest 中已声明的文件；`python -m build.script_update` 用同一套
+raw-files 规则刷新 `manifests/scripts.yml`。任何文件缺失、同仓库许可证文本变化或
+`update.license_marker` 消失都会失败并要求人工审计。刷新结果同时更新
 `manifests/shader-audit.json` 的 `upstream_commit`/`tls_sha256`，然后由
 `build.resolve`、双平台构建和 `build.verify` 再次校验。新增/删除 shader 文件
 仍需人工修改 manifest。
@@ -207,7 +238,8 @@ application/octet-stream`，公开仓库和私有仓库都能工作。仓库公�
    与 [shader-license-audit.md](shader-license-audit.md)。
 3. 运行 `python -m build.resolve --output sources.lock.json`。只更新部分组件时
    使用 `--only <id>`（可重复），它会保留 lock 中其他组件的现有版本；也可先运行
-   `python -m build.shader_update --check` 查看上游 pin 是否需要移动。
+   `python -m build.shader_update --check` 与
+   `python -m build.script_update --check` 查看 shader/Lua pin 是否需要移动。
 4. 运行本地 fetch/assemble/smoke/package/verify，或直接跑 `Build` 工作流。
 5. 提交 manifest 与新的 lock。
 

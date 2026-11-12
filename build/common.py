@@ -208,6 +208,72 @@ def validate_shader_component(identifier: str, component: dict[str, Any]) -> Non
                 fail(f"{identifier}: derived_from license is not redistributable")
 
 
+def validate_raw_target(
+    source: str,
+    target: str,
+    identifier: str,
+    *,
+    shader_only: bool = False,
+) -> str | None:
+    """Validate one raw-files source/target pair and return its policy.
+
+    Raw files may only land in three package locations: shaders, direct
+    children of ``portable_config/scripts`` (Lua scripts) and direct children
+    of ``portable_config/script-opts`` (options).  Subdirectories are
+    rejected so a raw component cannot shadow files owned by another
+    component such as uosc.  ``shaders.yml`` additionally has a GLSL-only
+    policy; other manifests may declare Lua/conf raw components.
+    """
+    parsed_target = Path(target)
+    raw_parts = target.split("/")
+    if (
+        parsed_target.is_absolute()
+        or "\\" in target
+        or any(part in {"", ".", ".."} for part in raw_parts)
+    ):
+        fail(f"{identifier}: raw file target is unsafe: {target!r}")
+    source_suffix = Path(source).suffix.lower()
+    target_suffix = Path(target).suffix.lower()
+    if shader_only and source_suffix not in {".glsl", ".hook"}:
+        fail(
+            f"{identifier}: shader raw file source must be .glsl or .hook: {source}"
+        )
+    if source_suffix in {".glsl", ".hook"}:
+        if not shader_only:
+            fail(
+                f"{identifier}: raw shader sources are only allowed in "
+                f"{SHADER_MANIFEST}: {source}"
+            )
+        if target_suffix != ".glsl" or not re.fullmatch(
+            r"portable_config/shaders/(?:[^/\\]+/)*[^/\\]+\.glsl", target
+        ):
+            fail(
+                f"{identifier}: raw shader target must be a .glsl file under "
+                f"portable_config/shaders/: {target}"
+            )
+        return "shader"
+    if shader_only:
+        fail(
+            f"{identifier}: shader raw file target must be a .glsl file under "
+            f"portable_config/shaders/: {target}"
+        )
+    if source_suffix == ".lua":
+        if not re.fullmatch(r"portable_config/scripts/[^/\\]+\.lua", target):
+            fail(
+                f"{identifier}: raw Lua target must be a direct .lua child of "
+                f"portable_config/scripts/: {target}"
+            )
+        return "script"
+    if source_suffix == ".conf":
+        if not re.fullmatch(r"portable_config/script-opts/[^/\\]+\.conf", target):
+            fail(
+                f"{identifier}: raw option target must be a direct .conf child of "
+                f"portable_config/script-opts/: {target}"
+            )
+        return "script-opt"
+    return None
+
+
 def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     project_path = manifest_dir / "project.yml"
     if not project_path.is_file():
@@ -262,14 +328,16 @@ def load_manifests(manifest_dir: Path = MANIFEST_DIR) -> tuple[dict[str, Any], d
                     path = Path(value)
                     if not value or path.is_absolute() or ".." in path.parts:
                         fail(f"{identifier}: raw file {label} is unsafe: {value!r}")
-                if Path(source).suffix.lower() not in {".glsl", ".hook"}:
-                    fail(f"{identifier}: raw file source must be .glsl or .hook: {source}")
-                if Path(target).suffix.lower() != ".glsl" or not target.startswith(
-                    "portable_config/shaders/"
-                ):
+                raw_target_policy = validate_raw_target(
+                    source,
+                    target,
+                    identifier,
+                    shader_only=component.get("_manifest") == SHADER_MANIFEST,
+                )
+                if raw_target_policy is None:
                     fail(
-                        f"{identifier}: raw file target must be a .glsl file under "
-                        f"portable_config/shaders/: {target}"
+                        f"{identifier}: raw file source must be .glsl, .hook, .lua "
+                        f"or .conf: {source}"
                     )
                 digest = str(item.get("sha256") or "")
                 if not re.fullmatch(r"[0-9a-f]{64}", digest):

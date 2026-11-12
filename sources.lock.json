@@ -1948,6 +1948,40 @@
       "upstream": "Artoriuz/ArtCNN",
       "version": "2026-10-22"
     },
+    "ashyni-dynamic-crop": {
+      "commit": "d3f5685f5209ae548f8398b21d4dcbbea766d076",
+      "files": [
+        {
+          "license": "MIT",
+          "sha256": "332f314b324617d7038c00c3ada08d257160e10766c801800dbdea325fe11022",
+          "size": 40728,
+          "source": "dynamic-crop.lua",
+          "target": "portable_config/scripts/dynamic_crop.lua",
+          "url": "https://raw.githubusercontent.com/Ashyni/mpv-scripts/d3f5685f5209ae548f8398b21d4dcbbea766d076/dynamic-crop.lua"
+        }
+      ],
+      "id": "ashyni-dynamic-crop",
+      "kind": "raw-files",
+      "license": {
+        "files": [
+          {
+            "commit": "d3f5685f5209ae548f8398b21d4dcbbea766d076",
+            "license": "MIT",
+            "path": "LICENSE",
+            "repository": "Ashyni/mpv-scripts",
+            "sha256": "6b3fc42e61c9a4c58917d0946148c510a7f4534c49565ba8b75f90c2fde0505d",
+            "size": 1086,
+            "source_path": "LICENSE",
+            "url": "https://raw.githubusercontent.com/Ashyni/mpv-scripts/d3f5685f5209ae548f8398b21d4dcbbea766d076/LICENSE"
+          }
+        ],
+        "spdx": "MIT"
+      },
+      "platforms": "all",
+      "ref": "d3f5685f5209ae548f8398b21d4dcbbea766d076",
+      "upstream": "Ashyni/mpv-scripts",
+      "version": "2024-09-14"
+    },
     "chroma_from_luma_prediction": {
       "commit": "066dff964b83aa34e893de25d590874bf8c8e94f",
       "family": "cfl",
@@ -2260,6 +2294,48 @@
       "upstream": "funnyplanter/CuNNy",
       "version": "2025-08-29"
     },
+    "eisa01-mpv-scripts": {
+      "commit": "b9e63743a858766c9cc7a801d77313b0cecdb049",
+      "files": [
+        {
+          "license": "BSD-2-Clause",
+          "sha256": "1cbaf6dc3855ebb4b7f92a69c48ba6b704b19585eaa3ee180e84dfa66f2d0520",
+          "size": 97973,
+          "source": "scripts/SimpleHistory.lua",
+          "target": "portable_config/scripts/SimpleHistory.lua",
+          "url": "https://raw.githubusercontent.com/Eisa01/mpv-scripts/b9e63743a858766c9cc7a801d77313b0cecdb049/scripts/SimpleHistory.lua"
+        },
+        {
+          "license": "BSD-2-Clause",
+          "sha256": "5bfd416814b7a85e8c6dd5d461a28f93d29379acf3b47fb97f80e52a0e7157b8",
+          "size": 136280,
+          "source": "scripts/SimpleBookmark.lua",
+          "target": "portable_config/scripts/SimpleBookmark.lua",
+          "url": "https://raw.githubusercontent.com/Eisa01/mpv-scripts/b9e63743a858766c9cc7a801d77313b0cecdb049/scripts/SimpleBookmark.lua"
+        }
+      ],
+      "id": "eisa01-mpv-scripts",
+      "kind": "raw-files",
+      "license": {
+        "files": [
+          {
+            "commit": "b9e63743a858766c9cc7a801d77313b0cecdb049",
+            "license": "BSD-2-Clause",
+            "path": "LICENSE",
+            "repository": "Eisa01/mpv-scripts",
+            "sha256": "eff4ec16f71637311aa59a69874db9160369dd4e7677d41741640e49ee904b39",
+            "size": 1323,
+            "source_path": "LICENSE",
+            "url": "https://raw.githubusercontent.com/Eisa01/mpv-scripts/b9e63743a858766c9cc7a801d77313b0cecdb049/LICENSE"
+          }
+        ],
+        "spdx": "BSD-2-Clause"
+      },
+      "platforms": "all",
+      "ref": "b9e63743a858766c9cc7a801d77313b0cecdb049",
+      "upstream": "Eisa01/mpv-scripts",
+      "version": "2025-06-21"
+    },
     "fsrcnnx": {
       "api_url": "https://api.github.com/repos/igv/FSRCNN-TensorFlow/releases/assets/53483506",
       "asset_id": 53483506,
@@ -2423,16 +2499,16 @@
       "version": "v1.530"
     },
     "mpv-linux": {
-      "api_url": "https://api.github.com/repos/pkgforge-dev/mpv-AppImage/releases/assets/720558173",
-      "asset_id": 720558173,
-      "asset_name": "mpv-v0.42.0-5-g55d3feb45-anylinux-x86_64.AppImage",
-      "commit": "55d3feb45c3dda1afd02b3087d3463c57d6514f7",
+      "api_url": "https://api.github.com/repos/pkgforge-dev/mpv-AppImage/releases/assets/735447809",
+      "asset_id": 735447809,
+      "asset_name": "mpv-v0.42.0-38-gbcde6b93c-anylinux-x86_64.AppImage",
+      "commit": "bcde6b93cca4d128d84e1a60d1a6db2cd81c889e",
       "id": "mpv-linux",
       "kind": "binary",
       "license": {
         "files": [
           {
-            "commit": "953226d87422e9ef2307afacd2e049b1ee0a7f56",
+            "commit": "a0a5b9bd834af986d37f658ed82056d9968aad34",
             "license": "GPL-3.0-or-later",
             "path": "LICENSE",
             "repository": "pkgforge-dev/mpv-AppImage",
@@ -2440,10 +2516,10 @@
             "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
             "size": 35149,
             "source_path": "LICENSE",
-            "url": "https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/953226d87422e9ef2307afacd2e049b1ee0a7f56/LICENSE"
+            "url": "https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/a0a5b9bd834af986d37f658ed82056d9968aad34/LICENSE"
           },
           {
-            "commit": "55d3feb45c3dda1afd02b3087d3463c57d6514f7",
+            "commit": "bcde6b93cca4d128d84e1a60d1a6db2cd81c889e",
             "license": "GPL-2.0-or-later",
             "path": "LICENSE.GPL",
             "repository": "mpv-player/mpv",
@@ -2451,10 +2527,10 @@
             "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
             "size": 17984,
             "source_path": "LICENSE.GPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/55d3feb45c3dda1afd02b3087d3463c57d6514f7/LICENSE.GPL"
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/bcde6b93cca4d128d84e1a60d1a6db2cd81c889e/LICENSE.GPL"
           },
           {
-            "commit": "55d3feb45c3dda1afd02b3087d3463c57d6514f7",
+            "commit": "bcde6b93cca4d128d84e1a60d1a6db2cd81c889e",
             "license": "LGPL-2.1-or-later",
             "path": "LICENSE.LGPL",
             "repository": "mpv-player/mpv",
@@ -2462,7 +2538,7 @@
             "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
             "size": 26410,
             "source_path": "LICENSE.LGPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/55d3feb45c3dda1afd02b3087d3463c57d6514f7/LICENSE.LGPL"
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/bcde6b93cca4d128d84e1a60d1a6db2cd81c889e/LICENSE.LGPL"
           }
         ],
         "parts": [
@@ -2486,15 +2562,15 @@
         "linux-x64"
       ],
       "provides": "mpv",
-      "published_at": "2026-11-07T11:49:56Z",
+      "published_at": "2026-11-11T12:27:58Z",
       "release_mode": "tag",
       "release_tag": "nightly",
       "release_url": "https://github.com/pkgforge-dev/mpv-AppImage/releases/tag/nightly",
-      "sha256": "cbd9ec199ad3456a3c4947ae8a9dfa293fc1f5aa58a207fcecc62fdfa052b75f",
-      "size": 31855901,
+      "sha256": "17a2aea240974857273d48610b47e16169cf401654fbcbac7d1df2d08375ce99",
+      "size": 31955246,
       "upstream": "pkgforge-dev/mpv-AppImage",
-      "url": "https://github.com/pkgforge-dev/mpv-AppImage/releases/download/nightly/mpv-v0.42.0-5-g55d3feb45-anylinux-x86_64.AppImage",
-      "version": "v0.42.0-5-g55d3feb45"
+      "url": "https://github.com/pkgforge-dev/mpv-AppImage/releases/download/nightly/mpv-v0.42.0-38-gbcde6b93c-anylinux-x86_64.AppImage",
+      "version": "v0.42.0-38-gbcde6b93c"
     },
     "mpv-prescalers": {
       "commit": "b3f0a59d68f33b7162051ea5970a5169558f0ea2",
@@ -3132,8 +3208,8 @@
       "version": "2026.10.26"
     }
   },
-  "generated_at": "2026-11-08T12:37:36Z",
-  "inputs_hash": "833ff17280b07bf2c1201acf1f6a00aaf4d5a9fe5df31399b98c66f917c1079e",
+  "generated_at": "2026-11-12T09:16:27Z",
+  "inputs_hash": "c7f68d4a9a069f5eacefa916d4a609627004eff9d6fc30f06f646964042ef191",
   "repository": "100pangci/mpv_PlayKit_TLS",
   "schema": 1
 }

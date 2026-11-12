@@ -19,6 +19,18 @@ const MAX_UNCOMPRESSED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_ENTRY_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO: u64 = 500;
 const MIN_RATIO_CHECK_BYTES: u64 = 1024 * 1024;
+/// Runtime logs are created or migrated by the updater and must never appear
+/// in a release archive.  The user layer ships a README placeholder so runtime
+/// writers have a stable directory before the first repair runs.
+const USER_DATA_DIR: &str = "portable_config/user/data";
+
+/// The user data directory is created by a documentation placeholder in the
+/// package.  Runtime logs beneath it must never be shipped.
+const USER_DATA_README: &str = "portable_config/user/data/README.md";
+const USER_DATA_RUNTIME_FILES: [&str; 2] = [
+    "portable_config/user/data/mpvHistory.log",
+    "portable_config/user/data/mpvBookmark.log",
+];
 
 pub fn expected_top(version: &str, platform: &str) -> String {
     format!("mpv-PlayKit-{version}-{platform}")
@@ -382,6 +394,7 @@ pub fn verify_package_tree(
         "portable_config/.playkit/official/profiles.conf",
         "portable_config/.playkit/official/platform.conf",
         "portable_config/user/README.md",
+        USER_DATA_README,
     ];
     for relative in required {
         let path = top.join(relative);
@@ -476,9 +489,62 @@ pub fn verify_package_tree(
             ));
         }
     }
+    verify_user_data_tree(top)?;
     verify_state(&top.join("portable_config").join(".playkit"), release)?;
     verify_inventory(top)?;
     Ok(package_manifest)
+}
+
+/// The package only carries the user data documentation placeholder.  The
+/// updater creates the directory for existing installations and preserves it
+/// across updates and rollbacks; history/bookmark logs are never release data.
+fn verify_user_data_tree(top: &Path) -> Result<()> {
+    let data = top.join(USER_DATA_DIR);
+    let entries = match fs::read_dir(&data) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(io_context(&format!("read {}", data.display()), error)),
+    };
+    for entry in entries {
+        let entry =
+            entry.map_err(|error| io_context(&format!("read {}", data.display()), error))?;
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| io_context(&format!("stat {}", path.display()), error))?;
+        if metadata.is_dir() {
+            return Err(Failure::failed(
+                "更新包包含未声明的用户数据目录。",
+                format!("{}", path.display()),
+            ));
+        }
+        if !metadata.is_file() {
+            return Err(Failure::failed(
+                "更新包包含不支持的用户数据类型。",
+                format!("{}", path.display()),
+            ));
+        }
+        let relative = path
+            .strip_prefix(&data)
+            .map_err(|error| Failure::internal(format!("user data path: {error}")))?
+            .to_string_lossy()
+            .replace('\\', "/");
+        if relative.eq_ignore_ascii_case("README.md") {
+            continue;
+        }
+        let kind = if USER_DATA_RUNTIME_FILES
+            .iter()
+            .any(|known| known.ends_with(&format!("/{relative}")))
+        {
+            "运行时日志"
+        } else {
+            "未声明的用户数据"
+        };
+        return Err(Failure::failed(
+            format!("更新包包含{kind}。"),
+            format!("unexpected {}", path.display()),
+        ));
+    }
+    Ok(())
 }
 
 /// The inventory lets the updater distinguish official files from user files
@@ -706,6 +772,32 @@ mod tests {
             }
         }
         builder.into_inner().unwrap().finish().unwrap()
+    }
+
+    #[test]
+    fn user_data_placeholder_is_allowed_but_runtime_logs_are_not() {
+        assert_eq!(USER_DATA_README, "portable_config/user/data/README.md");
+        assert!(USER_DATA_RUNTIME_FILES.contains(&"portable_config/user/data/mpvHistory.log"));
+        assert!(USER_DATA_RUNTIME_FILES.contains(&"portable_config/user/data/mpvBookmark.log"));
+
+        let dir = tempdir().unwrap();
+        let data = dir.path().join("portable_config/user/data");
+        fs::create_dir_all(&data).unwrap();
+        fs::write(data.join("README.md"), b"runtime data\n").unwrap();
+        verify_user_data_tree(dir.path()).unwrap();
+
+        for name in ["mpvHistory.log", "mpvBookmark.log", "other.json"] {
+            let path = data.join(name);
+            fs::write(&path, b"state\n").unwrap();
+            assert!(
+                verify_user_data_tree(dir.path()).is_err(),
+                "{name} must be rejected"
+            );
+            fs::remove_file(path).unwrap();
+        }
+
+        fs::create_dir(data.join("nested")).unwrap();
+        assert!(verify_user_data_tree(dir.path()).is_err());
     }
 
     #[test]
