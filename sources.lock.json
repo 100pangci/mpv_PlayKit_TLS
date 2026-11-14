@@ -2499,10 +2499,10 @@
       "version": "v1.530"
     },
     "mpv-linux": {
-      "api_url": "https://api.github.com/repos/pkgforge-dev/mpv-AppImage/releases/assets/735447809",
-      "asset_id": 735447809,
-      "asset_name": "mpv-v0.42.0-38-gbcde6b93c-anylinux-x86_64.AppImage",
-      "commit": "bcde6b93cca4d128d84e1a60d1a6db2cd81c889e",
+      "api_url": "https://api.github.com/repos/pkgforge-dev/mpv-AppImage/releases/assets/743667902",
+      "asset_id": 743667902,
+      "asset_name": "mpv-v0.42.0-39-gfe753a782-anylinux-x86_64.AppImage",
+      "commit": "fe753a78246151a2489b472dabcb04f2edd61d50",
       "id": "mpv-linux",
       "kind": "binary",
       "license": {
@@ -2519,7 +2519,7 @@
             "url": "https://raw.githubusercontent.com/pkgforge-dev/mpv-AppImage/a0a5b9bd834af986d37f658ed82056d9968aad34/LICENSE"
           },
           {
-            "commit": "bcde6b93cca4d128d84e1a60d1a6db2cd81c889e",
+            "commit": "fe753a78246151a2489b472dabcb04f2edd61d50",
             "license": "GPL-2.0-or-later",
             "path": "LICENSE.GPL",
             "repository": "mpv-player/mpv",
@@ -2527,10 +2527,10 @@
             "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
             "size": 17984,
             "source_path": "LICENSE.GPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/bcde6b93cca4d128d84e1a60d1a6db2cd81c889e/LICENSE.GPL"
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/fe753a78246151a2489b472dabcb04f2edd61d50/LICENSE.GPL"
           },
           {
-            "commit": "bcde6b93cca4d128d84e1a60d1a6db2cd81c889e",
+            "commit": "fe753a78246151a2489b472dabcb04f2edd61d50",
             "license": "LGPL-2.1-or-later",
             "path": "LICENSE.LGPL",
             "repository": "mpv-player/mpv",
@@ -2538,7 +2538,7 @@
             "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
             "size": 26410,
             "source_path": "LICENSE.LGPL",
-            "url": "https://raw.githubusercontent.com/mpv-player/mpv/bcde6b93cca4d128d84e1a60d1a6db2cd81c889e/LICENSE.LGPL"
+            "url": "https://raw.githubusercontent.com/mpv-player/mpv/fe753a78246151a2489b472dabcb04f2edd61d50/LICENSE.LGPL"
           }
         ],
         "parts": [
@@ -2562,15 +2562,15 @@
         "linux-x64"
       ],
       "provides": "mpv",
-      "published_at": "2026-11-11T12:27:58Z",
+      "published_at": "2026-11-13T12:57:39Z",
       "release_mode": "tag",
       "release_tag": "nightly",
       "release_url": "https://github.com/pkgforge-dev/mpv-AppImage/releases/tag/nightly",
-      "sha256": "17a2aea240974857273d48610b47e16169cf401654fbcbac7d1df2d08375ce99",
-      "size": 31955246,
+      "sha256": "87a91d1f61690f530a3d16c79a4d045ba7c39214ed3130ba78cc41e4d2eef552",
+      "size": 31961783,
       "upstream": "pkgforge-dev/mpv-AppImage",
-      "url": "https://github.com/pkgforge-dev/mpv-AppImage/releases/download/nightly/mpv-v0.42.0-38-gbcde6b93c-anylinux-x86_64.AppImage",
-      "version": "v0.42.0-38-gbcde6b93c"
+      "url": "https://github.com/pkgforge-dev/mpv-AppImage/releases/download/nightly/mpv-v0.42.0-39-gfe753a782-anylinux-x86_64.AppImage",
+      "version": "v0.42.0-39-gfe753a782"
     },
     "mpv-prescalers": {
       "commit": "b3f0a59d68f33b7162051ea5970a5169558f0ea2",
@@ -3208,8 +3208,8 @@
       "version": "2026.10.26"
     }
   },
-  "generated_at": "2026-11-12T10:49:28Z",
-  "inputs_hash": "af9075c43cfafcd2e4bbd020fa0187a1837e2fea4b668e8e8a5af9d73f136257",
+  "generated_at": "2026-11-14T10:51:18Z",
+  "inputs_hash": "e50c25479152842d471417d6442a9b93bced690902b1319c580ac3d90c987a36",
   "repository": "100pangci/mpv_PlayKit_TLS",
   "schema": 1
 }
