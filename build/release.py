@@ -244,8 +244,6 @@ def main(argv: list[str] | None = None) -> int:
     write_json(out_dir / "manifest.json", manifest)
 
     notes_lines = [
-        f"# mpv PlayKit {args.version}",
-        "",
         f"Automated build of `{args.repository}` at `{args.source_sha}`.",
         "",
         "## Platform players",
