@@ -2078,11 +2078,9 @@ class UpdateCheckerTests(unittest.TestCase):
             text,
         )
         self.assertIn("if auto_check_allowed then", text)
-        self.assertIn("if state.disabled or checking then return end", text)
-        self.assertIn(
-            "if not local_version or not parse_version(local_version) then return end",
-            text,
-        )
+        guards = text.split("local function run_check(force)", 1)[1].split("local now = os.time()", 1)[0]
+        for guard in ("state.disabled", "not local_version or not parse_version(local_version)"):
+            self.assertRegex(guards, rf"(?m)^\tif {re.escape(guard)} then\n[^\n]*\n\t\treturn\n\tend")
 
     def test_disabled_config_returns_before_state_or_network(self) -> None:
         text = (ROOT / "updater" / "update-check.lua").read_text(encoding="utf-8")
@@ -3133,12 +3131,12 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('"--detach"', text[install:capture])
         self.assertIn('"--wait-pid"', text[rollback:repair])
         self.assertIn('"--detach"', text[rollback:repair])
-        for name in ("install-now", "capture-now", "rollback", "repair-now"):
-            self.assertIn(f"mp.add_key_binding(nil, \"{name}\"", text)
-            self.assertIn(
-                f"script-binding update-check/{name}",
-                (ROOT / "config" / "common" / "input.conf").read_text(encoding="utf-8"),
-            )
+        bindings = (ROOT / "config" / "common" / "input.conf").read_text(encoding="utf-8")
+        self.assertNotIn("script-binding update-check/", bindings)
+        for name in ("check-now", "install-now", "capture-now", "rollback", "repair-now",
+                     "open-release", "snooze", "disable", "reset"):
+            self.assertIn(f'mp.add_key_binding(nil, "{name}"', text)
+            self.assertIn(f"script-binding update_check/{name}", bindings)
 
     def test_auto_repair_is_gated_by_the_enabled_switch(self) -> None:
         text = (ROOT / "updater" / "update-check.lua").read_text(encoding="utf-8")

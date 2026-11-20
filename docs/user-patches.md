@@ -61,10 +61,10 @@ schema 2 文件放在 `v2/` 子目录中；旧 helper 会忽略整个子目录�
   就生效。已经加载媒体时不会自动退出，只提示手动重启，避免丢失播放。
   `auto_repair_relaunch=no` 关闭自动重启；`yes` 强制重启（不会重新打开当前
   文件）。
-- **保存当前配置修改**：菜单项 `update-check/capture-now`，只把直接编辑捕获成
+- **保存当前配置修改**：菜单项 `update_check/capture-now`，只把直接编辑捕获成
   `auto/v2/*.patch`，不更新版本，也不是应用 patch 的步骤。捕获后会同步更新
   generated 快照和用户层指纹，因此下一次启动不会把这次编辑误判为未托管修改。
-- **立即重新应用配置 patch**：菜单项 `update-check/repair-now`，用于不等待
+- **立即重新应用配置 patch**：菜单项 `update_check/repair-now`，用于不等待
   下一次更新就强制重放 patch，或手动迁移。写出的配置在下次启动时生效；
   正常更新和重启都不需要它。
 
@@ -112,7 +112,7 @@ target=input.conf
 schema=2
 target=input.conf
 
-@after command:script-binding update-check/check-now
+@after command:script-binding update_check/check-now
 |#                script-binding my-ui/refresh #! 更新 > 刷新订阅
 @end
 ```
@@ -135,7 +135,7 @@ target=input.conf
 | 选择器 | 匹配对象 |
 | --- | --- |
 | `menu:更新 > 立即检查更新` | uosc 菜单标签路径 |
-| `command:script-binding update-check/check-now` | input.conf 绑定命令 |
+| `command:script-binding update_check/check-now` | input.conf 绑定命令 |
 | `key:Ctrl+u` | 配置键或按键 |
 | `section:gpu-hq` | `[gpu-hq]` 段头 |
 | `line:精确的整行文本` | 去除首尾空白后完全相同的原始行 |
@@ -151,7 +151,7 @@ target=input.conf
 因此插入菜单项时优先用 `command:` 作为锚点，让新标签只出现在插入的内容里：
 
 ```text
-@after command:script-binding update-check/check-now
+@after command:script-binding update_check/check-now
 |#                script-binding my-ui/refresh #! 更新 > 刷新订阅
 @end
 ```
@@ -217,7 +217,7 @@ schema=2
 target=input.conf
 
 MBTN_LEFT cycle pause
-Ctrl+Shift+u script-binding update-check/install-now
+Ctrl+Shift+u script-binding update_check/install-now
 -Ctrl+u
 
 @after command:cycle pause
@@ -288,7 +288,7 @@ Ctrl+u ignore
 旧内容并与新捕获合并：同一个键以最后一次捕获为准，行操作按顺序保留，因此
 多次更新不会因为 `auto/` 被清空而丢失之前的直接编辑意图。
 
-也可以在菜单中手动执行“保存当前配置修改”（`update-check/capture-now`），
+也可以在菜单中手动执行“保存当前配置修改”（`update_check/capture-now`），
 它只写 patch，不更新版本。
 
 ## 用户脚本与字体

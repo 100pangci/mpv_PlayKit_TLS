@@ -44,7 +44,7 @@ USER_README = """mpv PlayKit 用户层
 
 schema=2 还支持行操作，用来插入/删除/替换注释、uosc 菜单项等任意文本：
 
-    @after command:script-binding update-check/check-now
+    @after command:script-binding update_check/check-now
     |# script-binding my-ui/refresh #! 更新 > 刷新订阅
     @end
 

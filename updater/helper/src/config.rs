@@ -720,9 +720,18 @@ impl ConfigDoc {
                         && menu_label(&self.lines[index]).as_deref() == Some(selector.text.as_str())
                 }
                 SelectorKind::Command => {
-                    self.kind == ConfigKind::Input
-                        && line_command(&self.lines[index], self.kind).as_deref()
-                            == Some(selector.text.trim())
+                    let expected = selector.text.trim();
+                    line_command(&self.lines[index], self.kind).is_some_and(|command| {
+                        command == expected
+                            // Earlier PlayKit docs used the script's filename stem
+                            // as an anchor, not the name that mpv actually registers.
+                            || expected
+                                .strip_prefix("script-binding update-check/")
+                                .is_some_and(|binding| {
+                                    command.strip_prefix("script-binding update_check/")
+                                        == Some(binding)
+                                })
+                    })
                 }
                 SelectorKind::Key => match &self.lines[index].parsed {
                     ParsedLine::Entry(entry) => self.kind.key_matches(&entry.key, &selector.text),
@@ -1738,6 +1747,24 @@ mod tests {
         assert_eq!(
             config.render(),
             "#                script-binding update-check/check-now      #! 更新 > 立即检查更新\n#                script-binding my-ui/refresh #! 更新 > 刷新订阅\n"
+        );
+    }
+
+    #[test]
+    fn legacy_update_checker_anchor_matches_corrected_binding() {
+        let mut config = doc(
+            "Ctrl+u script-binding update_check/check-now\n# script-binding update_check/install-now\n",
+            ConfigKind::Input,
+        );
+        config
+            .apply(&patch(
+                "schema=2\n@after command:script-binding update-check/check-now\n|x my-command\n@end\n",
+                ConfigKind::Input,
+            ))
+            .unwrap();
+        assert_eq!(
+            config.render(),
+            "Ctrl+u script-binding update_check/check-now\nx my-command\n# script-binding update_check/install-now\n"
         );
     }
 

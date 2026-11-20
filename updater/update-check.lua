@@ -197,12 +197,20 @@ local function show_notice()
 	mp.msg.info("update-check: newer release available: " .. state.latest_version)
 end
 
-local function prompt_if_newer()
+local function prompt_if_newer(manual)
 	if state.disabled then return end
 	if not valid_release_url(state.latest_url) then return end
-	if not is_newer(state.latest_version, local_version) then return end
-	if state.dismissed_version == state.latest_version then return end
-	if tonumber(state.snoozed_until) and tonumber(state.snoozed_until) > os.time() then return end
+	if not is_newer(state.latest_version, local_version) then
+		if manual then
+			mp.osd_message("已是最新版本：" .. local_version, 4)
+			mp.msg.info("update-check: already the latest release: " .. local_version)
+		end
+		return
+	end
+	if not manual then
+		if state.dismissed_version == state.latest_version then return end
+		if tonumber(state.snoozed_until) and tonumber(state.snoozed_until) > os.time() then return end
+	end
 	show_notice()
 end
 
@@ -249,10 +257,22 @@ local function make_http_commands(url)
 end
 
 local checking = false
+local report_check = false
 
 local function run_check(force)
-	if state.disabled or checking then return end
-	if not local_version or not parse_version(local_version) then return end
+	if state.disabled then
+		if force then mp.osd_message("更新检查已关闭；请先恢复更新检查", 5) end
+		return
+	end
+	if not local_version or not parse_version(local_version) then
+		if force then mp.osd_message("无法识别当前 PlayKit 发行版本", 5) end
+		return
+	end
+	if force then mp.osd_message("正在检查更新…", 3) end
+	if checking then
+		report_check = report_check or force
+		return
+	end
 
 	local now = os.time()
 	local interval = math.max(0, tonumber(opts.check_interval_hours) or 24) * 3600
@@ -265,6 +285,7 @@ local function run_check(force)
 	end
 
 	checking = true
+	report_check = force
 	local api_url = string.format("https://api.github.com/repos/%s/releases/latest", opts.repository)
 	local commands = make_http_commands(api_url)
 
@@ -278,6 +299,7 @@ local function run_check(force)
 			state.last_check = now
 			write_state()
 			mp.msg.warn("update-check: no working HTTP client (curl or wget) or request failed")
+			if report_check then mp.osd_message("检查更新失败：无法从 GitHub 获取版本信息", 5) end
 			return
 		end
 
@@ -307,7 +329,7 @@ local function run_check(force)
 					state.latest_tag = release.tag_name
 					state.latest_url = release.html_url
 					write_state()
-					prompt_if_newer()
+					prompt_if_newer(report_check)
 					return
 				end
 			end
