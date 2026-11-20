@@ -86,6 +86,8 @@ pub struct Status {
     pub progress: Option<u32>,
     pub updated_at: String,
     pub pid: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
 }
@@ -115,6 +117,7 @@ impl Reporter {
                 progress: None,
                 updated_at: utc_now_iso(),
                 pid: std::process::id(),
+                request_id: None,
                 warnings: Vec::new(),
             },
             last_write: std::time::Instant::now()
@@ -122,6 +125,11 @@ impl Reporter {
                 .unwrap_or_else(std::time::Instant::now),
             last_progress: None,
         }
+    }
+
+    pub fn with_request_id(mut self, request_id: Option<String>) -> Self {
+        self.status.request_id = request_id;
+        self
     }
 
     pub fn logger(&self) -> &Logger {

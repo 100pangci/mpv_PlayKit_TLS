@@ -379,6 +379,7 @@ fn install_options(root: &Path, release: &Path, policy: UnmanagedPolicy) -> Inst
         platform: Some(platform().to_string()),
         wait_pid: 0,
         wait_timeout: Duration::from_secs(5),
+        request_id: None,
         unmanaged: policy,
         relaunch: RelaunchPolicy::No,
         source_dir: Some(release.to_path_buf()),
@@ -542,8 +543,16 @@ fn abort_policy_blocks_on_direct_edits() {
     );
     let release = make_release(&dir.path().join("release"), NEW_VERSION);
 
-    let error = install(&install_options(&root, &release, UnmanagedPolicy::Abort)).unwrap_err();
+    let mut options = install_options(&root, &release, UnmanagedPolicy::Abort);
+    options.wait_pid = std::process::id();
+    options.wait_timeout = Duration::from_secs(1);
+    options.request_id = Some("install-test".to_string());
+    let error = install(&options).unwrap_err();
     assert_eq!(error.kind, playkit_updater::util::ErrorKind::Blocked);
+    assert!(error.detail.contains("changed configs: mpv.conf"));
+    let status = read_status_file(&root).unwrap().unwrap();
+    assert_eq!(status.state, "blocked");
+    assert_eq!(status.request_id.as_deref(), Some("install-test"));
     assert_eq!(read_version(&root), OLD_VERSION);
     assert!(fs::read_to_string(root.join("portable_config/mpv.conf"))
         .unwrap()

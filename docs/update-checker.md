@@ -50,7 +50,8 @@ wait_timeout=600
 | `wait_timeout` | `600` | 等待 mpv 退出的最长秒数（1–3600） |
 
 `relaunch=auto` 只在 helper 能确认 mpv 是从当前安装目录启动时重启；`yes`
-强制重启，`no` 只更新不重启。
+强制重启，`no` 只更新不重启。手动安装更新时，helper 校验安装包并准备好用户配置后，
+Lua 会正常退出播放器。`wait_timeout` 限制 helper 等待进程退出的最长时间。
 
 ## 联网门禁
 
@@ -145,9 +146,11 @@ helper 比较 patch、用户脚本、字体和 script-opts 的指纹与 `state.j
 
 ## 安装、进度与失败
 
-选择安装后，Lua 删除旧的 `update-status.json`，每秒读取一次 helper 写入的
-状态文件，并把 `message` 显示在 OSD 上（下载、校验、准备、等待退出等）。
-`installed`、`rolled-back`、`repaired`、`captured` 为终态并停止轮询。
+选择安装后，Lua 每秒读取 `update-status.json`，用 `request_id` 识别本次安装，
+并把下载、校验和准备等进度显示在 OSD 上。收到本次安装的 `waiting` 状态后，
+Lua 正常退出 mpv。helper 等待进程退出，迁移最新的播放状态，再替换安装目录。
+安装成功后按 `relaunch` 设置决定是否启动新版。`installed`、`rolled-back`、
+`repaired`、`captured` 为终态并停止轮询。
 
 失败时 OSD 只显示简短原因，并提示：
 

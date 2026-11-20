@@ -40,10 +40,10 @@ Release、不启动 helper。`install_enabled=no` 可以只关闭安装，保留
 6. 校验包结构、`playkit-version.json`、包内 `manifest.json`、
    `playkit-inventory.json` 中每个文件的 SHA-256，以及 `.playkit/state.json`
    记录的官方基线。
-7. 等待当前 mpv 退出（`--wait-pid`，默认最多 600 秒）。
-8. 在 current 的同级 staging 目录组装新安装：复制新包、保留运行时状态、
-   迁移 `user/` 子层、合并自动 patch、应用 schema 1/2 手动与自动 patch、
-   复制用户脚本/字体/script-opts。
+7. 在同级 staging 目录迁移用户配置，合并自动 patch，应用 schema 1/2 手动和自动
+   patch，并复制用户脚本、字体与 script-opts。
+8. 配置准备完成后，Lua 收到本次安装的等待状态并正常退出 mpv。helper 等到进程
+   退出（`--wait-pid`，默认最多 600 秒），再迁移播放进度、历史记录等运行时数据。
 9. 再次确认 staging 完整后，用重命名完成交换：
    `current → current.previous`，`staging → current`。
    任一步失败会尝试恢复原目录。

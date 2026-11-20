@@ -366,8 +366,11 @@ end
 
 local status_timer = nil
 local last_status_key = nil
+local status_request_id = nil
+local install_sequence = 0
 
 local function stop_status_polling()
+	status_request_id = nil
 	if status_timer then
 		status_timer:kill()
 		status_timer = nil
@@ -377,10 +380,16 @@ end
 local function poll_update_status()
 	local status = read_json_file(status_path, 128 * 1024)
 	if not status or type(status.state) ~= "string" then return end
+	if status_request_id and status.request_id ~= status_request_id then return end
 	local key = status.state .. "|" .. tostring(status.message) .. "|" .. tostring(status.progress)
 	if key == last_status_key then return end
 	last_status_key = key
 	local message = tostring(status.message or "正在更新…")
+	if status.state == "waiting" and status_request_id then
+		stop_status_polling()
+		mp.commandv("quit")
+		return
+	end
 	if status.state == "installed" or status.state == "rolled-back"
 		or status.state == "repaired" or status.state == "captured"
 		or status.state == "up-to-date" or status.state == "relaunched" then
@@ -407,20 +416,27 @@ local function poll_update_status()
 	mp.osd_message(message, 5000)
 end
 
-local function start_status_polling()
-	os.remove(status_path)
-	last_status_key = nil
-	if not status_timer then
-		status_timer = mp.add_periodic_timer(1, poll_update_status)
+local function start_status_polling(request_id)
+	if status_timer then
+		mp.osd_message("更新器正在运行，请等待本次操作结束", 5000)
+		return false
 	end
+	if not request_id then os.remove(status_path) end
+	status_request_id = request_id
+	last_status_key = nil
+	status_timer = mp.add_periodic_timer(1, poll_update_status)
+	return true
 end
 
-local function run_helper(args, on_success)
+local function run_helper(args, on_success, detached)
+	-- A Windows mpv subprocess can remain pending until the worker exits.
+	-- Detach in mpv as well when the worker must wait for mpv to quit.
 	mp.command_native_async({
 		name = "subprocess",
 		args = args,
-		capture_stdout = true,
-		capture_stderr = true,
+		detach = detached == true,
+		capture_stdout = not detached,
+		capture_stderr = not detached,
 		playback_only = false,
 	}, function(success, result)
 		if success and result and result.status == 0 then
@@ -487,7 +503,14 @@ local function install_now()
 		mp.osd_message("Release tag 无效，已停止安装", 5000)
 		return
 	end
-	start_status_polling()
+	local pid = current_pid()
+	if pid == "0" then
+		mp.osd_message("无法确定当前播放器进程，请手动安装更新", 8000)
+		return
+	end
+	install_sequence = install_sequence + 1
+	local request_id = table.concat({ pid, os.time(), install_sequence }, "-")
+	if not start_status_polling(request_id) then return end
 	mp.osd_message("正在启动更新器…", 3000)
 	run_helper({
 		helper_path,
@@ -495,13 +518,14 @@ local function install_now()
 		"--root", root_path,
 		"--repository", opts.repository,
 		"--tag", tag,
-		"--wait-pid", current_pid(),
+		"--request-id", request_id,
+		"--wait-pid", pid,
 		"--wait-timeout", wait_timeout(),
 		"--unmanaged", policy(opts.unmanaged, { "capture", "discard", "abort" }, "capture"),
 		"--relaunch", relaunch_policy(),
 		"--quiet",
 		"--detach",
-	})
+	}, nil, true)
 end
 
 local function capture_now()
@@ -510,7 +534,7 @@ local function capture_now()
 		mp.osd_message("无法识别当前 PlayKit 版本，不能保存配置修改", 5000)
 		return
 	end
-	start_status_polling()
+	if not start_status_polling() then return end
 	mp.osd_message("正在保存当前配置修改…", 3000)
 	run_helper({
 		helper_path,
@@ -522,7 +546,7 @@ end
 
 local function rollback_now()
 	if not updater_available() then return end
-	start_status_polling()
+	if not start_status_polling() then return end
 	mp.osd_message("正在启动回滚…", 3000)
 	run_helper({
 		helper_path,
@@ -537,7 +561,7 @@ end
 
 local function repair_now()
 	if not updater_available() then return end
-	start_status_polling()
+	if not start_status_polling() then return end
 	mp.osd_message("正在按当前版本重新应用配置 patch…", 3000)
 	run_helper({
 		helper_path,

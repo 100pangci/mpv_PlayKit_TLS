@@ -4,6 +4,8 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::status::{Logger, Reporter};
+use crate::swap::Layout;
 use crate::update::{
     self, CaptureOptions, InstallOptions, RelaunchOptions, RelaunchPolicy, RepairOptions,
     RollbackOptions, UnmanagedPolicy,
@@ -94,8 +96,16 @@ fn install(args: &[String]) -> Result<i32> {
             "此构建不接受 --source-dir；正式更新只允许从 GitHub HTTPS 下载。",
         ));
     }
+    let request_id = optional_value(args, "--request-id");
     if detach {
-        return detach_worker("install", args);
+        let result = detach_worker("install", args);
+        if let (Err(error), Some(_), Ok(layout)) = (&result, &request_id, Layout::new(&root)) {
+            let logger = Logger::new(layout.log_path(), quiet);
+            Reporter::new(&layout.root, None, logger)
+                .with_request_id(request_id)
+                .finish("failed", error.user.clone(), Some(error.detail.clone()));
+        }
+        return result;
     }
     let options = InstallOptions {
         root,
@@ -104,6 +114,7 @@ fn install(args: &[String]) -> Result<i32> {
         platform,
         wait_pid,
         wait_timeout,
+        request_id,
         unmanaged,
         relaunch,
         source_dir,

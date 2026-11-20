@@ -96,6 +96,7 @@ pub struct InstallOptions {
     pub platform: Option<String>,
     pub wait_pid: u32,
     pub wait_timeout: Duration,
+    pub request_id: Option<String>,
     pub unmanaged: UnmanagedPolicy,
     pub relaunch: RelaunchPolicy,
     pub source_dir: Option<PathBuf>,
@@ -126,7 +127,8 @@ pub fn install(options: &InstallOptions) -> Result<InstallReport> {
     }
     let layout = Layout::new(&options.root)?;
     let logger = Logger::new(layout.log_path(), options.quiet);
-    let mut reporter = Reporter::new(&layout.root, None, logger);
+    let mut reporter =
+        Reporter::new(&layout.root, None, logger).with_request_id(options.request_id.clone());
     reporter.set("preparing", "正在准备更新。", None);
     let result = install_inner(options, &layout, &mut reporter);
     match &result {
@@ -342,12 +344,7 @@ fn install_stage(
     let top = archive::extract_package(&archive_path, &package_parent, target_version, platform)?;
     archive::verify_package_tree(&top, &manifest, platform, &platform_entry.asset)?;
 
-    reporter.set("ready", "更新已下载并校验，退出播放器后自动安装。", None);
-    if options.wait_pid != 0 {
-        reporter.set("waiting", "等待播放器退出后安装更新。", None);
-        wait_for_process(options.wait_pid, options.wait_timeout)?;
-    }
-
+    reporter.set("ready", "更新已下载并校验。", None);
     reporter.set("staging", "正在准备新版本与用户配置。", None);
     let current_portable = layout.root.join("portable_config");
     let staged_portable = top.join("portable_config");
@@ -367,7 +364,7 @@ fn install_stage(
         },
         &mut warnings,
     )?;
-    preserve_runtime(
+    preserve_user_config(
         &current_portable,
         &staged_portable,
         old_inventory.as_ref(),
@@ -397,8 +394,13 @@ fn install_stage(
         reporter.warnings(&warnings);
     }
 
-    // The user may have installed or repaired the directory while the download
-    // was running.  The lock only covers our own helper processes.
+    if options.wait_pid != 0 {
+        reporter.set("waiting", "等待播放器退出后安装更新。", None);
+        wait_for_process(options.wait_pid, options.wait_timeout)?;
+    }
+
+    // The user may have changed the installation while we were preparing it.
+    // The lock only covers our own helper processes.
     let recheck = read_install_version(&layout.root, platform)?;
     if recheck != current_version {
         return Err(Failure::blocked(
@@ -407,6 +409,8 @@ fn install_stage(
         ));
     }
 
+    // mpv and scripts can write their final playback state during shutdown.
+    preserve_runtime(&current_portable, &staged_portable)?;
     copy_log_to_staged(layout, &staged_portable);
     reporter.set("installing", "正在替换安装目录。", None);
     perform_swap(layout, &top)?;
@@ -866,28 +870,8 @@ fn preserve_user_data(source_portable: &Path, destination_portable: &Path) -> Re
     ensure_user_data_dir(destination_portable)
 }
 
-fn preserve_runtime(
-    current_portable: &Path,
-    staged_portable: &Path,
-    old_inventory: Option<&Inventory>,
-    new_inventory: Option<&Inventory>,
-    warnings: &mut Vec<String>,
-) -> Result<()> {
-    // The new archive ships an empty user layer (documentation only).  Carry
-    // the existing user-owned subtrees over before applying patches and
-    // copying user scripts/fonts/script-opts into place.  `user/` is never
-    // deleted by the updater.
+fn preserve_runtime(current_portable: &Path, staged_portable: &Path) -> Result<()> {
     preserve_user_data(current_portable, staged_portable)?;
-    let current_user = current_portable.join("user");
-    if current_user.is_dir() {
-        let staged_user = staged_portable.join("user");
-        for name in ["patches", "scripts", "fonts", "script-opts", "backup"] {
-            let source = current_user.join(name);
-            if source.is_dir() {
-                copy_tree_merge(&source, &staged_user.join(name), current_portable)?;
-            }
-        }
-    }
     for relative in ["update-check-state.json", "saved-props.json"] {
         let source = current_portable.join(relative);
         if source.is_file() {
@@ -906,6 +890,25 @@ fn preserve_runtime(
             &history,
             &staged_portable.join("_cache/command_history.txt"),
         )?;
+    }
+
+    Ok(())
+}
+
+fn preserve_user_config(
+    current_portable: &Path,
+    staged_portable: &Path,
+    old_inventory: Option<&Inventory>,
+    new_inventory: Option<&Inventory>,
+    warnings: &mut Vec<String>,
+) -> Result<()> {
+    let current_user = current_portable.join("user");
+    let staged_user = staged_portable.join("user");
+    for name in ["patches", "scripts", "fonts", "script-opts", "backup"] {
+        let source = current_user.join(name);
+        if source.is_dir() {
+            copy_tree_merge(&source, &staged_user.join(name), current_portable)?;
+        }
     }
 
     let Some(new_inventory) = new_inventory else {
@@ -938,6 +941,7 @@ fn preserve_runtime(
                 || relative.starts_with("_cache/")
                 || relative == "saved-props.json"
                 || relative == "update-check-state.json"
+                || relative == "watch_later"
             {
                 continue;
             }
@@ -2036,8 +2040,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut warnings = Vec::new();
-        preserve_runtime(&current, &staged, None, None, &mut warnings).unwrap();
+        preserve_runtime(&current, &staged).unwrap();
         assert_eq!(
             fs::read(staged.join(USER_DATA_DIR).join("mpvHistory.log")).unwrap(),
             b"history\n"
@@ -2057,7 +2060,7 @@ mod tests {
         // still creates the user-owned location for runtime writers.
         let empty_current = dir.path().join("empty-current/portable_config");
         let empty_staged = dir.path().join("empty-staged/portable_config");
-        preserve_runtime(&empty_current, &empty_staged, None, None, &mut warnings).unwrap();
+        preserve_runtime(&empty_current, &empty_staged).unwrap();
         assert!(empty_staged.join(USER_DATA_DIR).is_dir());
     }
 
