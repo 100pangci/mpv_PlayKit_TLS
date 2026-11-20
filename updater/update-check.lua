@@ -380,12 +380,15 @@ end
 local function poll_update_status()
 	local status = read_json_file(status_path, 128 * 1024)
 	if not status or type(status.state) ~= "string" then return end
-	if status_request_id and status.request_id ~= status_request_id then return end
+	-- A helper from an older package ignores --request-id and writes status
+	-- files without it; keep showing those states, but only quit on a waiting
+	-- state that this script requested.
+	if status_request_id and status.request_id and status.request_id ~= status_request_id then return end
 	local key = status.state .. "|" .. tostring(status.message) .. "|" .. tostring(status.progress)
 	if key == last_status_key then return end
 	last_status_key = key
 	local message = tostring(status.message or "正在更新…")
-	if status.state == "waiting" and status_request_id then
+	if status.state == "waiting" and status_request_id and status.request_id == status_request_id then
 		stop_status_polling()
 		mp.commandv("quit")
 		return
