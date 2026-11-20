@@ -4,6 +4,8 @@ import hashlib
 import io
 import json
 import re
+import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -1506,6 +1508,11 @@ class InstallerTests(unittest.TestCase):
         # SupportedTypes is a list of value names, not subkeys.
         self.assertIn("Applications\\mpv.exe\\SupportedTypes", install)
         self.assertNotIn("SupportedTypes\\.$ext", install)
+        # These shared registry keys can contain other applications' entries.
+        self.assertNotRegex(install, r"New-Item[^\n]+(?:OpenWithProgids|RegisteredApplications)")
+        self.assertNotIn("UserChoice", install)
+        self.assertIn(r"Software\Classes\*\shell\mpv-playkit", install)
+        self.assertIn('Set-RegString -KeyPath "$fileVerb\\command"', install)
         uninstall = (windows / "uninstall.ps1").read_text(encoding="utf-8-sig")
         self.assertIn("KeepUserData", uninstall)
         # The Capabilities key lives under Software\Clients\Media\mpv-playkit,
@@ -1517,6 +1524,119 @@ class InstallerTests(unittest.TestCase):
             "Software\\Clients\\Media\\mpv-playkit",
         ):
             self.assertIn(marker, uninstall)
+
+    @unittest.skipUnless(sys.platform == "win32", "requires Windows PowerShell 5.1")
+    def test_windows_installer_worker_reports_failure_without_showing_gui(self) -> None:
+        source = ROOT / "installer" / "windows" / "install.ps1"
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "安装 [test]"
+            installer = package / "installer" / "windows" / "install.ps1"
+            installer.parent.mkdir(parents=True)
+            installer.write_bytes(source.read_bytes())
+            target = Path(directory) / "安装目标"
+            probe = Path(directory) / "probe.ps1"
+            probe.write_text(
+                r"""
+param([string]$Installer, [string]$Target)
+$ErrorActionPreference = 'Stop'
+$runspace = [RunspaceFactory]::CreateRunspace($Host)
+$runspace.ApartmentState = 'STA'
+$ps = [PowerShell]::Create()
+try {
+    $runspace.Open()
+    $ps.Runspace = $runspace
+    [void]$ps.AddCommand($Installer).AddParameters(@{
+        GuiWorker = $true
+        InstallDir = $Target
+        NoDesktopShortcut = $true
+        NoStartMenuShortcut = $true
+        NoContextMenu = $true
+        NoFileAssociations = $true
+    })
+    try {
+        $ps.EndInvoke($ps.BeginInvoke()) | Out-Null
+        throw 'The worker unexpectedly completed successfully'
+    } catch {
+        if ($_.Exception.GetBaseException().Message -notlike '*mpv.exe*') { throw }
+    }
+} finally {
+    $ps.Dispose()
+    $runspace.Dispose()
+}
+""",
+                encoding="ascii",
+            )
+            result = subprocess.run(
+                [
+                    "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                    "-File", str(probe), str(installer), str(target),
+                ],
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(target.exists())
+
+    @unittest.skipUnless(sys.platform == "win32", "requires Windows PowerShell 5.1")
+    def test_windows_installer_registers_progid_in_existing_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            probe = Path(directory) / "probe.ps1"
+            probe.write_text(
+                r"""
+param([string]$Installer)
+$ErrorActionPreference = 'Stop'
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($Installer, [ref]$tokens, [ref]$errors)
+if ($errors) { throw ($errors | Out-String) }
+$function = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] `
+    -and $node.Name -eq 'Set-RegNone' }, $false)
+. ([scriptblock]::Create($function.Extent.Text))
+
+# Never touch real file associations. Model a writable OpenWithProgids key
+# under a parent where the current user is not allowed to create subkeys.
+$hive = [Microsoft.Win32.Registry]::CurrentUser
+$parentPath = 'Software\PlayKitInstallerTest-' + [guid]::NewGuid().ToString('N')
+$keyPath = "$parentPath\OpenWithProgids"
+$parent = $hive.CreateSubKey($parentPath)
+$deny = $null
+try {
+    $key = $hive.CreateSubKey($keyPath)
+    $key.SetValue('Other.Player', 'keep')
+    $key.Dispose()
+    $section = [Security.AccessControl.AccessControlSections]::Access
+    $acl = $parent.GetAccessControl($section)
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $deny = [Security.AccessControl.RegistryAccessRule]::new($sid, 'CreateSubKey', 'Deny')
+    $acl.AddAccessRule($deny)
+    $parent.SetAccessControl($acl)
+
+    Set-RegNone -KeyPath $keyPath -Name 'mpv-playkit'
+    $key = $hive.OpenSubKey($keyPath)
+    try {
+        if ($key.GetValueKind('mpv-playkit') -ne [Microsoft.Win32.RegistryValueKind]::None -or
+            $key.GetValue('Other.Player') -ne 'keep') { throw 'Unexpected OpenWithProgids values' }
+    } finally { $key.Dispose() }
+} finally {
+    if ($deny) {
+        $acl.RemoveAccessRuleSpecific($deny)
+        $parent.SetAccessControl($acl)
+    }
+    $parent.Dispose()
+    $hive.DeleteSubKeyTree($parentPath)
+}
+""",
+                encoding="ascii",
+            )
+            result = subprocess.run(
+                [
+                    "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                    "-File", str(probe), str(ROOT / "installer" / "windows" / "install.ps1"),
+                ],
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_linux_installer_is_a_placeholder(self) -> None:
         linux = ROOT / "installer" / "linux"

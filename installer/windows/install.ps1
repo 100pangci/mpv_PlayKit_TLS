@@ -18,7 +18,9 @@ param(
     [switch]$NoStartMenuShortcut,
     [switch]$NoContextMenu,
     [switch]$NoFileAssociations,
-    [switch]$Launch
+    [switch]$Launch,
+    [Parameter(DontShow = $true)]
+    [switch]$GuiWorker
 )
 
 $ErrorActionPreference = 'Stop'
@@ -175,11 +177,52 @@ function New-Shortcut {
 
 function Set-RegNone {
     param([string]$KeyPath, [string]$Name)
-    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($KeyPath)
+    $hive = [Microsoft.Win32.Registry]::CurrentUser
+    # An existing OpenWithProgids key can be writable even when its parent
+    # does not allow creating subkeys. Do not attempt to recreate it.
+    $key = $hive.OpenSubKey($KeyPath, [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,
+        [System.Security.AccessControl.RegistryRights]::SetValue)
+    if (-not $key) { $key = $hive.CreateSubKey($KeyPath) }
     try {
         $key.SetValue($Name, [byte[]]::new(0), [Microsoft.Win32.RegistryValueKind]::None)
     } finally {
         $key.Dispose()
+    }
+}
+
+function Set-RegString {
+    param(
+        [string]$KeyPath,
+        [AllowEmptyString()][string]$Name,
+        [string]$Value
+    )
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($KeyPath)
+    try {
+        $key.SetValue($Name, $Value, [Microsoft.Win32.RegistryValueKind]::String)
+    } finally {
+        $key.Dispose()
+    }
+}
+
+function Send-ShellAssociationChange {
+    # Run in the installer worker. Do not wait for Explorer to handle the notification.
+    try {
+        if (-not ('PlayKit.ShellAssociations' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace PlayKit {
+    public static class ShellAssociations {
+        [DllImport("shell32.dll", ExactSpelling = true)]
+        public static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
+    }
+}
+'@
+        }
+        # SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSHNOWAIT
+        [PlayKit.ShellAssociations]::SHChangeNotify(0x08000000, 0x2000, [IntPtr]::Zero, [IntPtr]::Zero)
+    } catch {
+        Write-Log ('无法通知资源管理器刷新文件关联：{0}' -f $_.Exception.Message)
     }
 }
 
@@ -267,8 +310,7 @@ function Register-Integration {
         New-Item -Path "$capabilities\FileAssociations" -Force | Out-Null
         Set-ItemProperty -Path $capabilities -Name 'ApplicationName' -Value 'mpv PlayKit'
         Set-ItemProperty -Path $capabilities -Name 'ApplicationDescription' -Value 'mpv PlayKit media player'
-        New-Item -Path 'HKCU:\Software\RegisteredApplications' -Force | Out-Null
-        Set-ItemProperty -Path 'HKCU:\Software\RegisteredApplications' -Name $script:ProgId `
+        Set-RegString -KeyPath 'Software\RegisteredApplications' -Name $script:ProgId `
             -Value 'Software\Clients\Media\mpv-playkit\Capabilities'
 
         # Match the original registration: offer mpv PlayKit in the "Open
@@ -288,24 +330,22 @@ function Register-Integration {
             }
             Set-ItemProperty -Path "$capabilities\FileAssociations" -Name ".$ext" -Value $script:ProgId
             try {
-                New-Item -Path (Join-Path $classes ".$ext\OpenWithProgids") -Force -ErrorAction Stop | Out-Null
                 Set-RegNone -KeyPath "Software\Classes\.$ext\OpenWithProgids" -Name $script:ProgId
             } catch {
                 # Some file types have protected OpenWithProgids keys (for
                 # example when another player owns them).  Registering the
                 # remaining types must still succeed.
-                Write-Log "跳过 .$ext 的“打开方式”注册：$($_.Exception.Message)"
+                Write-Log ('跳过 .{0} 的“打开方式”注册：{1}' -f $ext, $_.Exception.Message)
             }
         }
     }
 
     if ($ContextMenu) {
-        $fileVerb = Join-Path $classes '*\shell\mpv-playkit'
-        New-Item -Path "$fileVerb\command" -Force | Out-Null
-        Set-ItemProperty -Path $fileVerb -Name '(default)' -Value '用 mpv PlayKit 播放'
-        Set-ItemProperty -Path $fileVerb -Name 'Icon' -Value "$icon,0"
-        Set-ItemProperty -Path $fileVerb -Name 'MultiSelectModel' -Value 'Player'
-        Set-ItemProperty -Path "$fileVerb\command" -Name '(default)' -Value "`"$ExePath`" `"%1`""
+        $fileVerb = 'Software\Classes\*\shell\mpv-playkit'
+        Set-RegString -KeyPath $fileVerb -Name '' -Value '用 mpv PlayKit 播放'
+        Set-RegString -KeyPath $fileVerb -Name 'Icon' -Value "$icon,0"
+        Set-RegString -KeyPath $fileVerb -Name 'MultiSelectModel' -Value 'Player'
+        Set-RegString -KeyPath "$fileVerb\command" -Name '' -Value "`"$ExePath`" `"%1`""
 
         $dirVerb = Join-Path $classes 'Directory\shell\mpv-playkit'
         New-Item -Path "$dirVerb\command" -Force | Out-Null
@@ -329,6 +369,7 @@ function Register-Integration {
     }
     New-ItemProperty -Path $script:UninstallKey -Name 'NoModify' -PropertyType DWord -Value 1 -Force | Out-Null
     New-ItemProperty -Path $script:UninstallKey -Name 'NoRepair' -PropertyType DWord -Value 1 -Force | Out-Null
+    if ($FileAssociations -or $ContextMenu) { Send-ShellAssociationChange }
 }
 
 function Install-PlayKit {
@@ -467,12 +508,110 @@ function Show-Gui {
     $install.Location = New-Object System.Drawing.Point(384, 284)
     $install.Size = New-Object System.Drawing.Size(76, 32)
 
+    $defaults = New-Object System.Windows.Forms.Button
+    $defaults.Text = '设为默认播放器…'
+    $defaults.Location = New-Object System.Drawing.Point(16, 284)
+    $defaults.Size = New-Object System.Drawing.Size(156, 32)
+    $defaults.Visible = $false
+    $defaults.Add_Click({
+        try {
+            $app = [Uri]::EscapeDataString($script:ProgId)
+            Start-Process -FilePath "ms-settings:defaultapps?registeredAppUser=$app"
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                $form, '请手动打开 Windows 设置 → 应用 → 默认应用，再选择 mpv PlayKit。',
+                '无法打开默认应用设置', 'OK', 'Warning') | Out-Null
+        }
+    })
+    $form.Controls.Add($defaults)
+
     $cancel = New-Object System.Windows.Forms.Button
     $cancel.Text = '取消'
     $cancel.Location = New-Object System.Drawing.Point(468, 284)
     $cancel.Size = New-Object System.Drawing.Size(76, 32)
     $cancel.Add_Click({ $form.Close() })
     $form.Controls.Add($cancel)
+
+    $installerScript = $PSCommandPath
+    $worker = @{ Runspace = $null; PowerShell = $null; Result = $null; Target = $null }
+    $launchButton = New-Object System.Windows.Forms.Button
+    $launchButton.Text = '运行 mpv'
+    $launchButton.Location = $install.Location
+    $launchButton.Size = $install.Size
+    $launchButton.Visible = $false
+    $launchButton.Add_Click({
+        try {
+            Start-Process -FilePath (Join-Path $worker.Target 'mpv.exe') -WorkingDirectory $worker.Target
+            $form.Close()
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                $form, $_.Exception.Message, 'mpv PlayKit 启动失败', 'OK', 'Error') | Out-Null
+        }
+    })
+    $form.Controls.Add($launchButton)
+
+    $timer = New-Object System.Windows.Forms.Timer
+    $timer.Interval = 150
+    $setInstalling = {
+        param([bool]$Busy)
+        foreach ($control in @($pathBox, $browse, $desktopBox, $startBox, $contextBox, $assocBox, $install, $cancel)) {
+            $control.Enabled = -not $Busy
+        }
+        $form.UseWaitCursor = $Busy
+    }
+    $disposeWorker = {
+        if ($worker.PowerShell) {
+            $worker.PowerShell.Dispose()
+            $worker.PowerShell = $null
+        }
+        if ($worker.Runspace) {
+            $worker.Runspace.Dispose()
+            $worker.Runspace = $null
+        }
+        $worker.Result = $null
+    }
+    $showFailure = {
+        param([string]$Message)
+        & $setInstalling $false
+        $status.Text = '安装失败。'
+        [System.Windows.Forms.MessageBox]::Show($form, $Message, 'mpv PlayKit 安装失败', 'OK', 'Error') | Out-Null
+    }
+
+    $form.Add_FormClosing({
+        param($sender, $eventArgs)
+        # An interrupted copy or registry update can leave a partial install.
+        if ($timer.Enabled) { $eventArgs.Cancel = $true }
+    })
+    $timer.Add_Tick({
+        if (-not $worker.Result.IsCompleted) { return }
+        $timer.Stop()
+        $failure = $null
+        try {
+            $worker.PowerShell.EndInvoke($worker.Result) | Out-Null
+        } catch {
+            $failure = $_.Exception.GetBaseException().Message
+        } finally {
+            & $disposeWorker
+        }
+        if ($null -ne $failure) {
+            & $showFailure $failure
+            return
+        }
+
+        $status.Text = '安装完成。'
+        if ($assocBox.Checked) {
+            $status.Text += "`n未更改默认播放器。可以点击下方按钮，在 Windows 设置中更改。"
+            $defaults.Visible = $true
+        }
+        $form.UseWaitCursor = $false
+        $pathBox.Text = $worker.Target
+        $install.Visible = $false
+        $launchButton.Visible = $true
+        $cancel.Text = '关闭'
+        $cancel.Enabled = $true
+        $form.AcceptButton = $launchButton
+        [void]$cancel.Focus()
+    })
 
     $install.Add_Click({
         $target = $pathBox.Text.Trim()
@@ -503,40 +642,47 @@ function Show-Gui {
             return
         }
 
-        $install.Enabled = $false
-        $browse.Enabled = $false
+        & $setInstalling $true
         $status.Text = '正在安装，请稍候...'
-        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-        $form.Refresh()
         try {
-            Install-PlayKit -Source $script:PackageRoot -Target $target `
-                -DesktopShortcut $desktopBox.Checked -StartMenuShortcut $startBox.Checked `
-                -ContextMenu $contextBox.Checked -FileAssociations $assocBox.Checked
-            $form.Close()
-            $answer = [System.Windows.Forms.MessageBox]::Show(
-                "mpv PlayKit 已安装到：`n$target`n`n是否立即运行？",
-                'mpv PlayKit', 'YesNo', 'Information')
-            if ($answer -eq 'Yes') {
-                Start-Process -FilePath (Join-Path $target 'mpv.exe') -WorkingDirectory $target
+            $worker.Target = $target
+            # Use an STA runspace for WScript.Shell and retain console logging.
+            $worker.Runspace = [RunspaceFactory]::CreateRunspace($Host)
+            $worker.Runspace.ApartmentState = 'STA'
+            $worker.Runspace.Open()
+            $worker.PowerShell = [PowerShell]::Create()
+            $worker.PowerShell.Runspace = $worker.Runspace
+            $options = @{
+                GuiWorker = $true
+                InstallDir = $target
+                NoDesktopShortcut = -not $desktopBox.Checked
+                NoStartMenuShortcut = -not $startBox.Checked
+                NoContextMenu = -not $contextBox.Checked
+                NoFileAssociations = -not $assocBox.Checked
             }
+            [void]$worker.PowerShell.AddCommand($installerScript).AddParameters($options)
+            $worker.Result = $worker.PowerShell.BeginInvoke()
+            $timer.Start()
         } catch {
-            $install.Enabled = $true
-            $browse.Enabled = $true
-            $form.Cursor = [System.Windows.Forms.Cursors]::Default
-            $status.Text = '安装失败。'
-            [System.Windows.Forms.MessageBox]::Show($form, $_.Exception.Message, 'mpv PlayKit 安装失败', 'OK', 'Error') | Out-Null
+            & $disposeWorker
+            & $showFailure $_.Exception.GetBaseException().Message
         }
     })
     $form.Controls.Add($install)
 
     $form.AcceptButton = $install
     $form.CancelButton = $cancel
-    [void]$form.ShowDialog()
+    try {
+        [void]$form.ShowDialog()
+    } finally {
+        $timer.Dispose()
+        & $disposeWorker
+        $form.Dispose()
+    }
 }
 
 try {
-    if ($Silent) {
-        Write-Log "mpv PlayKit installer: $script:PackageRoot -> $InstallDir"
+    if ($Silent -or $GuiWorker) {
         $running = @(Get-RunningMpv)
         if ($running.Count -gt 0) {
             throw 'mpv PlayKit 正在运行，请先关闭后再安装。'
@@ -544,7 +690,7 @@ try {
         Install-PlayKit -Source $script:PackageRoot -Target $InstallDir `
             -DesktopShortcut (-not $NoDesktopShortcut) -StartMenuShortcut (-not $NoStartMenuShortcut) `
             -ContextMenu (-not $NoContextMenu) -FileAssociations (-not $NoFileAssociations)
-        Write-Log '安装完成。'
+        if ($GuiWorker) { return }
         if ($Launch) {
             Start-Process -FilePath $script:TargetExe -WorkingDirectory $InstallDir
         }
@@ -554,6 +700,7 @@ try {
     Show-Gui
     exit 0
 } catch {
+    if ($GuiWorker) { throw }
     if ($Silent) {
         [Console]::Error.WriteLine($_.Exception.Message)
         [Console]::Error.WriteLine($_.ScriptStackTrace)

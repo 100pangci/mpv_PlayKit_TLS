@@ -792,18 +792,25 @@ local function ensure_dir(path)
 	local info = utils.file_info(path)
 	if info and info.is_dir then return true end
 
-	local args
+	local args, env
 	if platform == "windows" then
-		-- cmd.exe is required because mkdir is a shell builtin on Windows.
-		-- The path is still a separate argv element, never a concatenated
-		-- command line.
-		args = { "cmd.exe", "/d", "/c", "mkdir", path }
+		-- cmd.exe mkdir rejects mpv's forward slashes and reparses shell
+		-- metacharacters. Pass the literal path as data to the .NET API.
+		local path_key = "MPV_PLAYKIT_SCREENSHOT_DIR="
+		env = {}
+		for _, entry in ipairs(utils.get_env_list()) do
+			if entry:sub(1, #path_key):upper() ~= path_key then env[#env + 1] = entry end
+		end
+		env[#env + 1] = path_key .. path
+		args = { "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+			"$ErrorActionPreference = 'Stop'; [void][IO.Directory]::CreateDirectory($env:MPV_PLAYKIT_SCREENSHOT_DIR)" }
 	else
 		args = { "mkdir", "-p", "--", path }
 	end
 	local ok, result = pcall(mp.command_native, {
 		name = "subprocess",
 		args = args,
+		env = env,
 		playback_only = false,
 		capture_stdout = true,
 		capture_stderr = true,
