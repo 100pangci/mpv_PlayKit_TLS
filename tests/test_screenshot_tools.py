@@ -139,7 +139,9 @@ class ScreenshotToolsBehaviourTests(unittest.TestCase):
         self.assertIn("args = args", text)
         self.assertIn("args = { configured, \"-version\" }", text)
         self.assertIn('args = { "mkdir", "-p", "--", path }', text)
-        self.assertIn('args = { "cmd.exe", "/d", "/c", "mkdir", path }', text)
+        self.assertIn('args = { "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",', text)
+        self.assertIn("CreateDirectory($env:MPV_PLAYKIT_SCREENSHOT_DIR)", text)
+        self.assertNotIn('"cmd.exe", "/d", "/c", "mkdir"', text)
 
     def test_stitch_prefers_bundled_mpv_and_falls_back_to_ffmpeg(self) -> None:
         text = read_script()
